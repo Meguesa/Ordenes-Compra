@@ -405,9 +405,8 @@ function ordenes_mail_graph_token(): string
 
 function ordenes_pdf_escape(string $text): string
 {
-    $encoded=function_exists('iconv')?@iconv('UTF-8','Windows-1252//TRANSLIT//IGNORE',$text):false;
-    if(!is_string($encoded)) $encoded=preg_replace('/[^\\x20-\\x7E]/','?',$text)??'';
-    return str_replace(['\\\\','(',')'],['\\\\\\\\','\\(','\\)'],$encoded);
+    $text = function_exists('iconv') ? (string)(@iconv('UTF-8','Windows-1252//TRANSLIT//IGNORE',$text) ?: '') : $text;
+    return str_replace(['\\','(',')'],['\\\\','\(','\)'],$text);
 }
 
 function ordenes_pdf_text(string &$stream,float $x,float $y,string $text,float $size=8,bool $bold=false): void
@@ -416,12 +415,7 @@ function ordenes_pdf_text(string &$stream,float $x,float $y,string $text,float $
     $stream.="BT /{$font} {$size} Tf {$x} {$y} Td (".ordenes_pdf_escape($text).") Tj ET\n";
 }
 
-function ordenes_pdf_line(string &$stream,float $x1,float $y1,float $x2,float $y2): void
-{
-    $stream.="0 G 0.55 w {$x1} {$y1} m {$x2} {$y2} l S\n";
-}
-
-function ordenes_pdf_rect(string &$stream,float $x,float $y,float $w,float $h,bool $fill=false): void
+function ordenes_pdf_box(string &$stream,float $x,float $y,float $w,float $h,bool $fill=false): void
 {
     if($fill) $stream.="0.88 g {$x} {$y} {$w} {$h} re f 0 g\n";
     $stream.="0 G 0.55 w {$x} {$y} {$w} {$h} re S\n";
@@ -471,12 +465,10 @@ function ordenes_pdf_money(float $value,string $currency): string
       .'<p style="margin:20px 0 0;color:#756a64;font-size:12px">Durante esta etapa de pruebas, el único destinatario es '.$h($recipient).'.</p>'
       .'</td></tr></table></td></tr></table></body></html>';
 
-    $input['folio']=$folio;
-    $input['itemId']=$itemId;
-    $pdf=ordenes_pdf_build($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
+    $pdf=ordenes_build_pdf($input,$user);
     if(!str_starts_with($pdf,'%PDF-')) throw new RuntimeException('No fue posible generar un PDF valido.');
-
     $attachmentName='ODC_'.$folio.'.pdf';
+
     $request=[
         'message'=>[
             'subject'=>'[PRUEBA] Orden de Compra '.$folio.' | '.$proveedor,
@@ -631,68 +623,29 @@ function ordenes_pdf_money(float $value,string $currency): string
 ).number_format($value,2,'.',',');
 }
 
-function ordenes_pdf_wrap(string $text,int $maxChars=48,int $maxLines=2): array
+function ordenes_build_pdf(array $d,array $user): string
 {
-    $text=trim(preg_replace('/\\s+/u',' ',$text)??$text);
-    if($text==='') return [''];
-    $words=preg_split('/\\s+/u',$text)?:[$text];
-    $lines=[];$line='';
-    foreach($words as $word){
-        $candidate=$line===''?$word:$line.' '.$word;
-        if(mb_strlen($candidate,'UTF-8')<=$maxChars){
-            $line=$candidate;
-            continue;
-        }
-        if($line!=='') $lines[]=$line;
-        $line=$word;
-        if(count($lines)>=$maxLines-1) break;
-    }
-    if(count($lines)<$maxLines && $line!=='') $lines[]=$line;
-    if(count($lines)===$maxLines && mb_strlen(implode(' ',$lines),'UTF-8')<mb_strlen($text,'UTF-8')){
-        $last=array_pop($lines);
-        $last=mb_substr($last,0,max(1,$maxChars-3),'UTF-8').'...';
-        $lines[]=$last;
-    }
-    return $lines;
-}
-
-function ordenes_pdf_build(array $d,array $user,string $documentRoot): string
-{
-    $s=''; $left=42.0; $right=570.0;
+    $s='';
     $currency=strtoupper(trim((string)($d['moneda']??'MXN')));
     if(!in_array($currency,['MXN','USD'],true)) $currency='MXN';
-
     $folio=trim((string)($d['folio']??'PENDIENTE'));
     $fecha=trim((string)($d['fecha']??''));
     if(preg_match('/^(\\d{4})-(\\d{2})-(\\d{2})$/',$fecha,$m)) $fecha=$m[3].'/'.$m[2].'/'.$m[1];
 
-    $logoBytes=''; $logoW=0; $logoH=0;
-    $logoPath=rtrim($documentRoot,'/').'/mapa/assets/logo.jpg';
-    if(is_file($logoPath)){
-        $info=@getimagesize($logoPath);
-        $bytes=@file_get_contents($logoPath);
-        if(is_array($info)&&is_string($bytes)&&$bytes!==''&&($info[2]??0)===IMAGETYPE_JPEG){
-            $logoBytes=$bytes; $logoW=(int)$info[0]; $logoH=(int)$info[1];
-        }
-    }
+    ordenes_pdf_text($s,220,756,'ORDEN DE COMPRA',16,false);
+    ordenes_pdf_text($s,228,733,'Jardines de Juan Pablo',12,true);
+    ordenes_pdf_text($s,194,718,'RAZON SOCIAL: MEGUESA   RFC: MEG-060608-LQ6',8,true);
+    ordenes_pdf_text($s,174,706,'CALLE: CHURUBUSCO NORTE No 217   COLONIA: CHURUBUSCO',8,true);
+    ordenes_pdf_text($s,238,694,'MONTERREY, NL CP 64590',8,true);
 
-    if($logoBytes!=='') $s.="q 52 0 0 52 48 704 cm /Im1 Do Q\n";
-    ordenes_pdf_text($s,220,754,'ORDEN DE COMPRA',16,false);
-    ordenes_pdf_text($s,228,731,'Jardines de Juan Pablo',12,true);
-    ordenes_pdf_text($s,194,716,'RAZON SOCIAL: MEGUESA   RFC: MEG-060608-LQ6',8,true);
-    ordenes_pdf_text($s,174,704,'CALLE: CHURUBUSCO NORTE No 217   COLONIA: CHURUBUSCO',8,true);
-    ordenes_pdf_text($s,238,692,'MONTERREY, NL CP 64590',8,true);
-    ordenes_pdf_text($s,102,733,'20',20,true);
-    ordenes_pdf_text($s,105,723,'ANOS',6,true);
+    ordenes_pdf_box($s,466,735,104,28,true);
+    ordenes_pdf_text($s,474,745,'No  '.$folio,9,true);
+    ordenes_pdf_box($s,466,701,104,20,true);
+    ordenes_pdf_text($s,501,708,'FECHA',8,true);
+    ordenes_pdf_box($s,466,673,104,20,true);
+    ordenes_pdf_text($s,495,680,$fecha,8,true);
 
-    ordenes_pdf_rect($s,466,733,104,30,true);
-    ordenes_pdf_text($s,473,744,'No  '.$folio,9,true);
-    ordenes_pdf_rect($s,466,697,104,22,true);
-    ordenes_pdf_text($s,500,705,'FECHA',8,true);
-    ordenes_pdf_rect($s,466,669,104,22,true);
-    ordenes_pdf_text($s,494,677,$fecha,8,true);
-
-    $py=650.0; $rh=19.0; $cols=[88.0,240.0,92.0,108.0];
+    $left=42.0;$top=651.0;$rh=19.0;$cols=[88.0,240.0,92.0,108.0];
     $rows=[
         ['EMPRESA:',(string)($d['proveedor']??''),'',''],
         ['DOMICILIO:',(string)($d['domicilio']??''),'TELEFONO:',(string)($d['telefono']??'')],
@@ -700,17 +653,17 @@ function ordenes_pdf_build(array $d,array $user,string $documentRoot): string
         ['COND. DE PAGO:',(string)($d['condicionPago']??''),'T. CAMBIO:',(string)($d['tipoCambio']??1)],
         ['MONEDA:',$currency,'RFC:',(string)($d['rfc']??'')],
     ];
-    foreach($rows as $ri=>$row){
-        $y=$py-$rh*($ri+1); $x=$left;
-        foreach($cols as $cw){ordenes_pdf_rect($s,$x,$y,$cw,$rh,false);$x+=$cw;}
+    foreach($rows as $i=>$row){
+        $y=$top-$rh*($i+1);$x=$left;
+        foreach($cols as $w){ordenes_pdf_box($s,$x,$y,$w,$rh,false);$x+=$w;}
         ordenes_pdf_text($s,$left+4,$y+6,$row[0],7,true);
-        ordenes_pdf_text($s,$left+$cols[0]+4,$y+6,mb_substr($row[1],0,45,'UTF-8'),7,false);
+        ordenes_pdf_text($s,$left+$cols[0]+4,$y+6,mb_substr($row[1],0,44,'UTF-8'),7,false);
         if($row[2]!=='') ordenes_pdf_text($s,$left+$cols[0]+$cols[1]+4,$y+6,$row[2],7,true);
         if($row[3]!=='') ordenes_pdf_text($s,$left+$cols[0]+$cols[1]+$cols[2]+4,$y+6,mb_substr($row[3],0,24,'UTF-8'),7,false);
     }
 
-    $tableTop=535.0; $headerH=24.0; $itemH=22.0; $ic=[90.0,268.0,82.0,88.0];
-    $x=$left; foreach($ic as $cw){ordenes_pdf_rect($s,$x,$tableTop-$headerH,$cw,$headerH,true);$x+=$cw;}
+    $tableTop=535.0;$hh=24.0;$ih=22.0;$ic=[90.0,268.0,82.0,88.0];
+    $x=$left;foreach($ic as $w){ordenes_pdf_box($s,$x,$tableTop-$hh,$w,$hh,true);$x+=$w;}
     ordenes_pdf_text($s,59,$tableTop-16,'CANTIDAD',7,true);
     ordenes_pdf_text($s,201,$tableTop-16,'DESCRIPCION',7,true);
     ordenes_pdf_text($s,405,$tableTop-11,'PRECIO',6,true);
@@ -718,86 +671,56 @@ function ordenes_pdf_build(array $d,array $user,string $documentRoot): string
     ordenes_pdf_text($s,505,$tableTop-16,'IMPORTE',7,true);
 
     $items=is_array($d['items']??null)?$d['items']:[];
-    $rowsCount=max(10,min(12,count($items)>10?count($items):10));
+    $rowsCount=10;
     for($i=0;$i<$rowsCount;$i++){
-        $y=$tableTop-$headerH-$itemH*($i+1); $x=$left;
-        foreach($ic as $cw){ordenes_pdf_rect($s,$x,$y,$cw,$itemH,false);$x+=$cw;}
-        $it=$items[$i]??null;
-        if(!is_array($it)) continue;
-        $qty=(float)($it['qty']??0);
-        $price=(float)($it['price']??0);
-        $amount=(float)($it['amount']??($qty*$price));
-        $descLines=ordenes_pdf_wrap((string)($it['description']??''),54,2);
+        $y=$tableTop-$hh-$ih*($i+1);$x=$left;
+        foreach($ic as $w){ordenes_pdf_box($s,$x,$y,$w,$ih,false);$x+=$w;}
+        if(!isset($items[$i])||!is_array($items[$i])) continue;
+        $it=$items[$i];$qty=(float)($it['qty']??0);$price=(float)($it['price']??0);
+        $amount=(float)($it['amount']??($qty*$price));$desc=trim((string)($it['description']??''));
+        if(mb_strlen($desc,'UTF-8')>54) $desc=mb_substr($desc,0,51,'UTF-8').'...';
         ordenes_pdf_text($s,92,$y+8,$qty==(int)$qty?(string)(int)$qty:number_format($qty,2,'.',''),7,false);
-        ordenes_pdf_text($s,137,$y+12,$descLines[0]??'',6.6,false);
-        if(isset($descLines[1])) ordenes_pdf_text($s,137,$y+4,$descLines[1],6.6,false);
+        ordenes_pdf_text($s,137,$y+8,$desc,6.6,false);
         ordenes_pdf_text($s,410,$y+8,ordenes_pdf_money($price,$currency),7,false);
         ordenes_pdf_text($s,505,$y+8,ordenes_pdf_money($amount,$currency),7,false);
     }
 
-    $bottom=$tableTop-$headerH-$itemH*$rowsCount;
-    ordenes_pdf_rect($s,$left,$bottom-24,300,24,true);
+    $bottom=$tableTop-$hh-$ih*$rowsCount;
+    ordenes_pdf_box($s,$left,$bottom-24,300,24,true);
     ordenes_pdf_text($s,70,$bottom-15,'FAVOR DE CONFIRMAR RECEPCION DE OC',9,true);
+    ordenes_pdf_text($s,$left,$bottom-46,'CONFIRMACION DE REQUISICION',8,false);
+    ordenes_pdf_text($s,$left,$bottom-68,'NOMBRE: '.trim((string)($user['name']??'')),7,false);
+    ordenes_pdf_text($s,$left,$bottom-88,'PUESTO:',7,false);
+    ordenes_pdf_text($s,$left,$bottom-108,'FIRMA:',7,false);
 
-    ordenes_pdf_text($s,$left,$bottom-45,'CONFIRMACION DE REQUISICION',8,false);
-    ordenes_pdf_text($s,$left,$bottom-68,'NOMBRE:',7,false);
-    ordenes_pdf_text($s,95,$bottom-68,trim((string)($user['name']??'')),8,true);
-    ordenes_pdf_line($s,94,$bottom-71,340,$bottom-71);
-    ordenes_pdf_text($s,$left,$bottom-89,'PUESTO:',7,false);
-    ordenes_pdf_line($s,94,$bottom-92,340,$bottom-92);
-    ordenes_pdf_text($s,$left,$bottom-110,'FIRMA:',7,false);
-    ordenes_pdf_line($s,94,$bottom-113,340,$bottom-113);
-
-    $subtotal=(float)($d['subtotal']??0);
-    $iva=(float)($d['iva']??0);
-    $retIsr=(float)($d['retIsr']??0);
-    $retIva=(float)($d['retIva']??0);
+    $subtotal=(float)($d['subtotal']??0);$iva=(float)($d['iva']??0);
+    $retIsr=(float)($d['retIsr']??0);$retIva=(float)($d['retIva']??0);
     $total=(float)($d['total']??($subtotal+$iva-$retIsr-$retIva));
-    $totals=[
-        ['SUBTOTAL:',$subtotal],
-        ['I.V.A.',$iva],
-        ['retencion ISR',-$retIsr],
-        ['Retencion IVA',-$retIva],
-        ['TOTAL',$total],
+    $totals=[['SUBTOTAL:',$subtotal],['I.V.A.',$iva],['retencion ISR',-$retIsr],['Retencion IVA',-$retIva],['TOTAL',$total]];
+    foreach($totals as $i=>$row){
+        $y=$bottom-20*($i+1);
+        if($i===4) ordenes_pdf_box($s,350,$y,220,20,true);
+        else $s.="0 G 0.55 w 350 {$y} m 570 {$y} l S\n";
+        ordenes_pdf_text($s,420,$y+6,$row[0],7,$i===4);
+        ordenes_pdf_text($s,505,$y+6,ordenes_pdf_money((float)$row[1],$currency),7,true);
+    }
+    ordenes_pdf_text($s,350,$bottom-122,'No. Cuenta: '.trim((string)($d['cuenta']??'')),7,false);
+    ordenes_pdf_text($s,350,$bottom-137,'No. Clabe: '.trim((string)($d['clabe']??'')),7,false);
+    ordenes_pdf_text($s,350,$bottom-152,'Banco: '.trim((string)($d['banco']??'')),7,false);
+
+    $objects=[
+        1=>'<< /Type /Catalog /Pages 2 0 R >>',
+        2=>'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        3=>'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>',
+        4=>"<< /Length ".strlen($s)." >>\nstream\n".$s."endstream",
+        5=>'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+        6=>'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
     ];
-    $tx=350.0; $ty=$bottom; $tr=20.0;
-    foreach($totals as $idx=>$row){
-        $y=$ty-$tr*($idx+1);
-        if($idx===4) ordenes_pdf_rect($s,$tx,$y,220,$tr,true);
-        else ordenes_pdf_line($s,$tx,$y,$right,$y);
-        ordenes_pdf_text($s,$tx+70,$y+6,$row[0],7,$idx===4);
-        ordenes_pdf_text($s,$tx+155,$y+6,ordenes_pdf_money((float)$row[1],$currency),7,true);
-    }
-
-    $bankY=$bottom-122;
-    ordenes_pdf_text($s,$tx,$bankY,'No. Cuenta: '.trim((string)($d['cuenta']??'')),7,false);
-    ordenes_pdf_text($s,$tx,$bankY-15,'No. Clabe: '.trim((string)($d['clabe']??'')),7,false);
-    ordenes_pdf_text($s,$tx,$bankY-30,'Banco: '.trim((string)($d['banco']??'')),7,false);
-
-    $objects=[];
-    $objects[1]='<< /Type /Catalog /Pages 2 0 R >>';
-    $objects[2]='<< /Type /Pages /Kids [3 0 R] /Count 1 >>';
-    $resources='<< /Font << /F1 5 0 R /F2 6 0 R >>';
-    if($logoBytes!=='') $resources.=' /XObject << /Im1 7 0 R >>';
-    $resources.=' >>';
-    $objects[3]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources '.$resources.' /Contents 4 0 R >>';
-    $objects[4]="<< /Length ".strlen($s)." >>\nstream\n".$s."endstream";
-    $objects[5]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
-    $objects[6]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
-    if($logoBytes!==''){
-        $objects[7]="<< /Type /XObject /Subtype /Image /Width {$logoW} /Height {$logoH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ".strlen($logoBytes)." >>\nstream\n".$logoBytes."\nendstream";
-    }
-
-    ksort($objects);
-    $pdf="%PDF-1.4\n"; $offsets=[0];
-    foreach($objects as $n=>$obj){
-        $offsets[$n]=strlen($pdf);
-        $pdf.="{$n} 0 obj\n{$obj}\nendobj\n";
-    }
-    $max=max(array_keys($objects));
-    $xref=strlen($pdf);
+    $pdf="%PDF-1.4\n";$offsets=[0];
+    foreach($objects as $n=>$obj){$offsets[$n]=strlen($pdf);$pdf.="{$n} 0 obj\n{$obj}\nendobj\n";}
+    $xref=strlen($pdf);$max=max(array_keys($objects));
     $pdf.="xref\n0 ".($max+1)."\n0000000000 65535 f \n";
-    for($i=1;$i<=$max;$i++) $pdf.=sprintf("%010d 00000 n \n",$offsets[$i]??0);
+    for($i=1;$i<=$max;$i++) $pdf.=sprintf("%010d 00000 n \n",$offsets[$i]);
     $pdf.="trailer\n<< /Size ".($max+1)." /Root 1 0 R >>\nstartxref\n{$xref}\n%%EOF";
     return $pdf;
 }
