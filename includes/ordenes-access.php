@@ -434,6 +434,7 @@ function ordenes_prepare_uploaded_attachments(array $files): array
 
         $size = (int)($sizes[$i] ?? 0);
         if ($size <= 0) throw new RuntimeException('El archivo '.$name.' esta vacio.');
+        if ($size > 2097152) throw new RuntimeException('El archivo '.$name.' supera el limite individual de 2 MB.');
         $total += $size;
         if ($total > 2621440) throw new RuntimeException('Los adjuntos superan el limite combinado de 2.5 MB.');
 
