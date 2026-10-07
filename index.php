@@ -69,7 +69,7 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
         if ($mailNonce !== '' && isset($usedMail[$mailNonce])) {
             $mailResult = [
                 'ok' => true,
-                'recipient' => 'gabriel.guerra@juanpablo.com.mx',
+                'recipient' => 'finanzas@juanpablo.com.mx',
                 'duplicate' => true,
             ];
         } else {
@@ -185,7 +185,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-8">
+  <link rel="stylesheet" href="styles.css?v=20261007-9">
 </head>
 <body>
 <header class="tool-header">
@@ -465,7 +465,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
       <div class="form-actions">
         <button id="btnDraft" class="secondary-button" type="button">Guardar borrador</button>
         <button id="btnPreview" class="secondary-button" type="button">Vista previa PDF</button>
-        <button id="btnTestEmail" class="primary-button" type="button">Enviar prueba a Gabriel</button>
+        <button id="btnTestEmail" class="primary-button" type="button">Enviar prueba a Finanzas</button>
         <button class="primary-button" type="button" disabled title="Se habilitará al conectar el flujo productivo">Generar y enviar a Finanzas</button>
       </div>
     </section>
@@ -505,6 +505,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'mailFolio' => is_array($mailPayload) ? (string)($mailPayload['folio'] ?? '') : '',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-8"></script>
+<script src="assets/js/app.js?v=20261007-9"></script>
 </body>
 </html>
