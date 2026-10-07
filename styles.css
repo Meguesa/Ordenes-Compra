@@ -91,13 +91,10 @@ button{cursor:pointer}
 .odc-brandmark{
   display:flex;
   align-items:center;
-  gap:6px;
+  justify-content:center;
   min-height:86px;
 }
-.odc-brandmark img{width:72px;height:72px;object-fit:contain}
-.odc-anniversary{display:flex;flex-direction:column;align-items:center;line-height:.9;color:#b79a46}
-.odc-anniversary strong{font-size:30px;font-weight:700}
-.odc-anniversary span{margin-top:4px;font-family:Arial,sans-serif;font-size:8px;letter-spacing:.12em}
+.odc-brandmark img{height:74px;width:auto;max-width:104px;object-fit:contain}
 .odc-title-block{text-align:center;padding-top:0}
 .odc-main-title{font-size:22px;line-height:1.15;margin-bottom:16px}
 .odc-company-name{font-size:20px;font-weight:700;line-height:1.15}
@@ -109,7 +106,7 @@ button{cursor:pointer}
   align-items:center;
   justify-content:center;
   border:1px solid #000;
-  background:#ded9c7;
+  background:#EEECE1;
   font-weight:700;
 }
 .odc-number{font-size:20px;min-height:38px}
@@ -142,7 +139,7 @@ button{cursor:pointer}
 .odc-items-table th,
 .odc-items-table td{border:1px solid #000}
 .odc-items-table th{
-  background:#ded9c7;
+  background:#EEECE1;
   font-family:"Times New Roman",Times,serif;
   font-size:10px;
   font-weight:700;
@@ -172,7 +169,7 @@ button{cursor:pointer}
   display:flex;
   align-items:center;
   justify-content:center;
-  background:#ded9c7;
+  background:#EEECE1;
   border-left:1px solid #000;
   border-right:1px solid #000;
   border-bottom:1px solid #000;
@@ -222,7 +219,7 @@ button{cursor:pointer}
 }
 .odc-total-row th,
 .odc-total-row td{
-  background:#ded9c7;
+  background:#EEECE1;
   font-size:12px;
   font-weight:700;
   border-top:1px solid #000;
@@ -236,7 +233,7 @@ button{cursor:pointer}
 @media(max-width:860px){
   .pdf-preview{width:calc(100% - 18px);padding:26px 24px;min-height:auto}
   .odc-top-grid{grid-template-columns:95px 1fr 125px;gap:8px}
-  .odc-brandmark img{width:58px;height:58px}
+  .odc-brandmark img{height:58px;width:auto;max-width:82px}
   .odc-main-title{font-size:18px}
   .odc-company-name{font-size:16px}
   .odc-number{font-size:15px}
