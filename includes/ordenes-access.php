@@ -32,7 +32,15 @@ function ordenes_require_preview_access(): void
 const ORDENES_LIST_TITLE = 'BI_Ordenes_Compra';
 
 function ordenes_config(): array {
-    $raw = require '/home/juanpab1/portal-config/config.php';
+    $raw = null;
+    foreach (['/home/juanpab1/reportes-config/config.php','/home/juanpab1/portal-config/config.php'] as $configPath) {
+        if (!is_file($configPath)) continue;
+        $loaded = require $configPath;
+        if (is_array($loaded)) {
+            $raw = $loaded;
+            break;
+        }
+    }
     if (!is_array($raw)) throw new RuntimeException('Configuracion privada no disponible.');
     $cfg = [
         'tenantId'=>trim((string)($raw['reportes_tenant_id'] ?? $raw['portal_access_tenant_id'] ?? $raw['solicitud_backend_tenant_id'] ?? '')),
