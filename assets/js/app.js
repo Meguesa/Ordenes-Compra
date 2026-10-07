@@ -254,6 +254,10 @@
   }
 
   function saveDraft() {
+    if (!syncDateFromDisplay()) {
+      $('fechaDisplay').reportValidity();
+      return;
+    }
     const data = currentData();
     persistLocal(data);
 
@@ -270,6 +274,11 @@
   }
 
   function sendTestEmail() {
+    if (!syncDateFromDisplay()) {
+      $('fechaDisplay').reportValidity();
+      $('btnTestEmail').dataset.sending = '0';
+      return;
+    }
     const data = currentData();
     persistLocal(data);
 
@@ -355,7 +364,7 @@
       <div class="odc-sheet">
         <div class="odc-top-grid">
           <div class="odc-brandmark">
-            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+            <img src="assets/odc-logo.jpg" alt="Jardines de Juan Pablo">
           </div>
 
           <div class="odc-title-block">
