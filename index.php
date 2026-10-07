@@ -15,6 +15,12 @@ if (!$prototypeMode) {
     if (empty($_SESSION['ordenes_csrf']) || !is_string($_SESSION['ordenes_csrf'])) {
         $_SESSION['ordenes_csrf'] = bin2hex(random_bytes(24));
     }
+    if (empty($_SESSION['ordenes_mail_nonce']) || !is_string($_SESSION['ordenes_mail_nonce'])) {
+        $_SESSION['ordenes_mail_nonce'] = bin2hex(random_bytes(24));
+    }
+    if (!isset($_SESSION['ordenes_mail_used']) || !is_array($_SESSION['ordenes_mail_used'])) {
+        $_SESSION['ordenes_mail_used'] = [];
+    }
 } else {
     $user = [
         'name' => 'Gabriel Guerra',
@@ -56,13 +62,37 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
             throw new RuntimeException('La sesion del formulario expiro. Actualiza la pagina e intentalo nuevamente.');
         }
 
-        $encoded = trim((string)($_POST['draft_payload'] ?? ''));
-        $decoded = base64_decode($encoded, true);
-        if ($decoded === false || $decoded === '') throw new RuntimeException('No fue posible leer los datos de la ODC.');
-        $mailPayload = json_decode($decoded, true);
-        if (!is_array($mailPayload)) throw new RuntimeException('Los datos recibidos no son validos.');
+        $mailNonce = trim((string)($_POST['mail_nonce'] ?? ''));
+        $currentMailNonce = (string)($_SESSION['ordenes_mail_nonce'] ?? '');
+        $usedMail = is_array($_SESSION['ordenes_mail_used'] ?? null) ? $_SESSION['ordenes_mail_used'] : [];
 
-        $mailResult = ordenes_send_test_email($mailPayload, $user);
+        if ($mailNonce !== '' && isset($usedMail[$mailNonce])) {
+            $mailResult = [
+                'ok' => true,
+                'recipient' => 'gabriel.guerra@juanpablo.com.mx',
+                'duplicate' => true,
+            ];
+        } else {
+            if ($mailNonce === '' || $currentMailNonce === '' || !hash_equals($currentMailNonce, $mailNonce)) {
+                throw new RuntimeException('La solicitud de correo ya expiro. Recarga la pagina antes de volver a enviarla.');
+            }
+
+            $usedMail[$mailNonce] = time();
+            if (count($usedMail) > 12) {
+                asort($usedMail);
+                $usedMail = array_slice($usedMail, -12, null, true);
+            }
+            $_SESSION['ordenes_mail_used'] = $usedMail;
+            $_SESSION['ordenes_mail_nonce'] = bin2hex(random_bytes(24));
+
+            $encoded = trim((string)($_POST['draft_payload'] ?? ''));
+            $decoded = base64_decode($encoded, true);
+            if ($decoded === false || $decoded === '') throw new RuntimeException('No fue posible leer los datos de la ODC.');
+            $mailPayload = json_decode($decoded, true);
+            if (!is_array($mailPayload)) throw new RuntimeException('Los datos recibidos no son validos.');
+
+            $mailResult = ordenes_send_test_email($mailPayload, $user);
+        }
     } catch (Throwable $error) {
         $mailError = $error->getMessage();
     }
@@ -147,6 +177,7 @@ if (!$prototypeMode && isset($_GET['action'])) {
 $name = htmlspecialchars(trim((string)($user['name'] ?? 'Usuario')), ENT_QUOTES, 'UTF-8');
 $email = htmlspecialchars(strtolower(trim((string)($user['email'] ?? ''))), ENT_QUOTES, 'UTF-8');
 $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->format('Y-m-d');
+$todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->format('d/m/Y');
 ?><!doctype html>
 <html lang="es-MX">
 <head>
@@ -154,7 +185,7 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-5">
+  <link rel="stylesheet" href="styles.css?v=20261007-6">
 </head>
 <body>
 <header class="tool-header">
@@ -219,6 +250,7 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
     <input type="hidden" name="form_action" value="save_draft">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['ordenes_csrf'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" id="draftPayload" name="draft_payload" value="">
+    <input type="hidden" id="mailNonce" name="mail_nonce" value="<?= htmlspecialchars((string)($_SESSION['ordenes_mail_nonce'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
 
     <section class="form-section">
       <div class="section-title">
@@ -236,7 +268,8 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
           </select>
         </label>
         <label>Fecha
-          <input id="fecha" type="date" value="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>" required>
+          <input id="fechaDisplay" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="dd/mm/aaaa" value="<?= htmlspecialchars($todayDisplay, ENT_QUOTES, 'UTF-8') ?>" required>
+          <input id="fecha" type="hidden" value="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>">
         </label>
         <label>Folio
           <input type="text" value="Se genera automáticamente" readonly>
@@ -449,6 +482,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'mailFolio' => is_array($mailPayload) ? (string)($mailPayload['folio'] ?? '') : '',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-5"></script>
+<script src="assets/js/app.js?v=20261007-6"></script>
 </body>
 </html>
