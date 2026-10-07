@@ -445,11 +445,23 @@ function ordenes_send_test_email(array $input,array $user): array
       .'<p style="margin:20px 0 0;color:#756a64;font-size:12px">Durante esta etapa de pruebas, el único destinatario es '.$h($recipient).'.</p>'
       .'</td></tr></table></td></tr></table></body></html>';
 
+    $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
+    if(!str_starts_with($pdf,'%PDF-')) {
+        throw new RuntimeException('No fue posible generar un PDF valido para la ODC.');
+    }
+    $attachmentName='ODC_'.$folio.'.pdf';
+
     $request=[
         'message'=>[
             'subject'=>'[PRUEBA] Orden de Compra '.$folio.' | '.$proveedor,
             'body'=>['contentType'=>'HTML','content'=>$html],
             'toRecipients'=>[['emailAddress'=>['address'=>$recipient]]],
+            'attachments'=>[[
+                '@odata.type'=>'#microsoft.graph.fileAttachment',
+                'name'=>$attachmentName,
+                'contentType'=>'application/pdf',
+                'contentBytes'=>base64_encode($pdf),
+            ]],
         ],
         'saveToSentItems'=>true,
     ];
@@ -494,5 +506,6 @@ function ordenes_send_test_email(array $input,array $user): array
         'recipient'=>$recipient,
         'sender'=>$sender,
         'folio'=>$folio,
+        'attachment'=>$attachmentName,
     ];
 }
