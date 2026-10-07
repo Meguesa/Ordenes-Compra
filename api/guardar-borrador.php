@@ -102,7 +102,7 @@ try {
 
     if ($itemId > 0) {
         $existing = ordenes_get_item($itemId);
-        $emailField = ordenes_resolve_internal_field('SolicitanteCorreo');
+        $emailField = ordenes_field('SolicitanteCorreo');
         $existingOwner = $emailField !== null ? strtolower(trim((string)($existing[$emailField] ?? ''))) : '';
         if ($existingOwner !== '' && $existingOwner !== $userEmail) throw new RuntimeException('No tienes permiso para modificar este borrador.');
         if ($folio === '') $folio = 'ODC-PREVIEW-' . str_pad((string)$itemId, 6, '0', STR_PAD_LEFT);
