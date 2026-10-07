@@ -120,6 +120,7 @@
       proveedor: $('proveedor').value.trim(),
       rfc: $('rfc').value.trim().toUpperCase(),
       telefono: $('telefono').value.trim(),
+      domicilio: $('domicilio') ? $('domicilio').value.trim() : '',
       ciudadEstado: $('ciudadEstado').value.trim(),
       condicionPago: $('condicionPago').value.trim(),
       tiempoEntrega: $('tiempoEntrega').value.trim(),
@@ -165,7 +166,7 @@
     $('btnPrepareSharepoint').hidden = false;
     $('sharepointStatus').className = 'sharepoint-status warning';
     $('sharepointStatus').textContent = names.length
-      ? `SharePoint conectado; faltan ${names.length} columnas para guardar.`
+      ? `SharePoint conectado; faltan ${names.length} columnas para guardar: ${names.join(', ')}.`
       : 'La lista requiere preparación antes de guardar.';
   }
 
@@ -252,7 +253,7 @@
 
   function populateDraft(data) {
     if (!data || typeof data !== 'object') return;
-    const ids = ['fecha','proveedor','rfc','telefono','ciudadEstado','condicionPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe'];
+    const ids = ['fecha','proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe'];
     ids.forEach((id) => {
       if (data[id] !== undefined && $(id)) $(id).value = data[id];
     });
@@ -296,7 +297,7 @@
 
     $('previewContent').innerHTML = `
       <div class="preview-top">
-        <div><h3>ORDEN DE COMPRA</h3></div>
+        <div class="preview-logo-title"><img class="preview-logo" src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo"><h3>ORDEN DE COMPRA</h3></div>
         <div class="preview-number">No. ${escapeHtml(d.folio || 'PENDIENTE')}<br><span>${formatDate(d.fecha)}</span></div>
       </div>
       <div class="preview-company">
@@ -310,6 +311,8 @@
         <div><strong>TELÉFONO:</strong> ${escapeHtml(d.telefono || '—')}</div>
         <div><strong>RFC:</strong> ${escapeHtml(d.rfc || '—')}</div>
         <div><strong>T. ENTREGA:</strong> ${escapeHtml(d.tiempoEntrega || '—')}</div>
+        <div><strong>DOMICILIO:</strong> ${escapeHtml(d.domicilio || '—')}</div>
+        <div></div>
         <div><strong>CIUDAD/ESTADO:</strong> ${escapeHtml(d.ciudadEstado || '—')}</div>
         <div><strong>T. CAMBIO:</strong> ${d.tipoCambio || 1}</div>
         <div><strong>COND. DE PAGO:</strong> ${escapeHtml(d.condicionPago || '—')}</div>
