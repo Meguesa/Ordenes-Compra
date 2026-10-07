@@ -22,6 +22,57 @@ if (!$prototypeMode) {
     ];
 }
 
+if (!$prototypeMode && isset($_GET['action'])) {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+
+    try {
+        $action = trim((string)$_GET['action']);
+
+        if ($action === 'diagnostico') {
+            $missing = ordenes_missing_schema_fields();
+            echo json_encode([
+                'ok' => true,
+                'list' => ORDENES_LIST_TITLE,
+                'ready' => count($missing) === 0,
+                'missing' => $missing,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        if ($action === 'guardar') {
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+                throw new RuntimeException('Metodo no permitido.');
+            }
+
+            $expected = (string)($_SESSION['ordenes_csrf'] ?? '');
+            $received = trim((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+            if ($expected === '' || $received === '' || !hash_equals($expected, $received)) {
+                throw new RuntimeException('La sesion de seguridad no es valida. Recarga la pagina.');
+            }
+
+            $raw = file_get_contents('php://input');
+            $input = json_decode((string)$raw, true);
+            if (!is_array($input)) throw new RuntimeException('El cuerpo JSON no es valido.');
+
+            echo json_encode(
+                ordenes_save_draft_payload($input, $user),
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+            exit;
+        }
+
+        throw new RuntimeException('Accion no reconocida.');
+    } catch (Throwable $error) {
+        http_response_code(400);
+        echo json_encode([
+            'ok' => false,
+            'error' => $error->getMessage(),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+}
+
 $name = htmlspecialchars(trim((string)($user['name'] ?? 'Usuario')), ENT_QUOTES, 'UTF-8');
 $email = htmlspecialchars(strtolower(trim((string)($user['email'] ?? ''))), ENT_QUOTES, 'UTF-8');
 $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->format('Y-m-d');
