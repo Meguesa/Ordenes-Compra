@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/ordenes-pdf.php';
+
 /** @return string[] */
 function ordenes_preview_allowed_emails(): array
 {
