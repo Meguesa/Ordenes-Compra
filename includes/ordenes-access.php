@@ -524,7 +524,17 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
         throw new RuntimeException('Tu cuenta no puede enviar correos de prueba.');
     }
 
-    $recipient='finanzas@juanpablo.com.mx';
+    $toAddresses=[
+        'finanzas@juanpablo.com.mx',
+        'admin.gerencia@juanpablo.com.mx',
+        'jose.santana@juanpablo.com.mx',
+    ];
+    $requesterEmail=strtolower(trim((string)($user['email']??'')));
+    $ccAddresses=[];
+    if($requesterEmail!=='' && !in_array($requesterEmail,$toAddresses,true)) {
+        $ccAddresses[]=$requesterEmail;
+    }
+    $recipient=implode(', ',$toAddresses);
     $sender='sistemas@juanpablo.com.mx';
     $proveedor=trim((string)($input['proveedor']??''));
     $observaciones=trim((string)($input['observaciones']??''));
@@ -550,7 +560,7 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
       .'</table>'
       .'<div style="margin-top:20px;padding:14px 16px;background:#fff8e6;border:1px solid #efd48a;border-radius:8px">'
       .'<strong>Observaciones</strong><div style="margin-top:8px;line-height:1.5">'.$obsHtml.'</div></div>'
-      .'<p style="margin:20px 0 0;color:#756a64;font-size:12px">Durante esta etapa de pruebas, el único destinatario es '.$h($recipient).'.</p>'
+      .'<p style="margin:20px 0 0;color:#756a64;font-size:12px">Destinatarios de prueba: '.$h($recipient).($ccAddresses?'. Copia al solicitante: '.$h(implode(', ',$ccAddresses)):'').'.</p>'
       .'</td></tr></table></td></tr></table></body></html>';
 
     $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
@@ -563,7 +573,8 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
         'message'=>[
             'subject'=>'[PRUEBA] Orden de Compra '.$folio.' | '.$proveedor,
             'body'=>['contentType'=>'HTML','content'=>$html],
-            'toRecipients'=>[['emailAddress'=>['address'=>$recipient]]],
+            'toRecipients'=>array_map(static fn(string $address):array=>['emailAddress'=>['address'=>$address]],$toAddresses),
+            'ccRecipients'=>array_map(static fn(string $address):array=>['emailAddress'=>['address'=>$address]],$ccAddresses),
             'attachments'=>array_merge([[
                 '@odata.type'=>'#microsoft.graph.fileAttachment',
                 'name'=>$attachmentName,
