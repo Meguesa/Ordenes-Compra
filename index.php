@@ -24,6 +24,9 @@ if (!$prototypeMode) {
 
 $saveResult = null;
 $saveError = '';
+$mailResult = null;
+$mailError = '';
+$mailPayload = null;
 
 if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['form_action'] ?? '') === 'save_draft') {
     try {
@@ -42,6 +45,26 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
         $saveResult = ordenes_save_draft_payload($input, $user);
     } catch (Throwable $error) {
         $saveError = $error->getMessage();
+    }
+}
+
+if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['form_action'] ?? '') === 'send_test_email') {
+    try {
+        $expected = (string)($_SESSION['ordenes_csrf'] ?? '');
+        $received = (string)($_POST['csrf_token'] ?? '');
+        if ($expected === '' || $received === '' || !hash_equals($expected, $received)) {
+            throw new RuntimeException('La sesion del formulario expiro. Actualiza la pagina e intentalo nuevamente.');
+        }
+
+        $encoded = trim((string)($_POST['draft_payload'] ?? ''));
+        $decoded = base64_decode($encoded, true);
+        if ($decoded === false || $decoded === '') throw new RuntimeException('No fue posible leer los datos de la ODC.');
+        $mailPayload = json_decode($decoded, true);
+        if (!is_array($mailPayload)) throw new RuntimeException('Los datos recibidos no son validos.');
+
+        $mailResult = ordenes_send_test_email($mailPayload, $user);
+    } catch (Throwable $error) {
+        $mailError = $error->getMessage();
     }
 }
 
@@ -131,7 +154,7 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-4">
+  <link rel="stylesheet" href="styles.css?v=20261007-5">
 </head>
 <body>
 <header class="tool-header">
@@ -365,6 +388,19 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
       </div>
     </section>
 
+    <section class="form-section">
+      <div class="section-title">
+        <span>7</span>
+        <div>
+          <h2>Observaciones</h2>
+          <p>Este texto se incluirá únicamente en el cuerpo del correo. No se guarda en SharePoint ni aparece en el PDF.</p>
+        </div>
+      </div>
+      <label>Observaciones para Finanzas
+        <textarea id="observaciones" rows="4" placeholder="Ej. Favor de programar el pago antes del viernes."></textarea>
+      </label>
+    </section>
+
     <section class="form-actions-panel">
       <div class="form-status">
         <strong>Versión de prueba</strong>
@@ -373,6 +409,7 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
       <div class="form-actions">
         <button id="btnDraft" class="secondary-button" type="button">Guardar borrador</button>
         <button id="btnPreview" class="secondary-button" type="button">Vista previa PDF</button>
+        <button id="btnTestEmail" class="primary-button" type="button">Enviar prueba a Gabriel</button>
         <button class="primary-button" type="button" disabled title="Se habilitará al conectar el flujo productivo">Generar y enviar a Finanzas</button>
       </div>
     </section>
@@ -405,8 +442,13 @@ window.ODC_CONTEXT = <?= json_encode([
     'folio' => is_array($saveResult) ? (string)($saveResult['folio'] ?? '') : '',
     'saveOk' => is_array($saveResult),
     'saveError' => $saveError,
+    'mailOk' => is_array($mailResult),
+    'mailError' => $mailError,
+    'mailRecipient' => is_array($mailResult) ? (string)($mailResult['recipient'] ?? '') : '',
+    'mailItemId' => is_array($mailPayload) ? (int)($mailPayload['itemId'] ?? 0) : 0,
+    'mailFolio' => is_array($mailPayload) ? (string)($mailPayload['folio'] ?? '') : '',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-4"></script>
+<script src="assets/js/app.js?v=20261007-5"></script>
 </body>
 </html>
