@@ -25,7 +25,7 @@ function odc_pdf_line(string &$s,float $x1,float $y1,float $x2,float $y2): void
 
 function odc_pdf_box(string &$s,float $x,float $y,float $w,float $h,bool $fill=false): void
 {
-    if($fill) $s.="0.88 g {$x} {$y} {$w} {$h} re f 0 g\n";
+    if($fill) $s.="0.933 0.925 0.882 rg {$x} {$y} {$w} {$h} re f 0 g\n";
     $s.="0 G 0.55 w {$x} {$y} {$w} {$h} re S\n";
 }
 
@@ -64,9 +64,15 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
         }
     }
 
-    if($logoBytes!=='') $s.="q 58 0 0 58 48 700 cm /Im1 Do Q\n";
-    odc_pdf_text($s,105,733,'20',20,true);
-    odc_pdf_text($s,108,723,'ANOS',6,true);
+    if($logoBytes!=='' && $logoW>0 && $logoH>0) {
+        $maxW=78.0; $maxH=70.0;
+        $scale=min($maxW/$logoW,$maxH/$logoH);
+        $drawW=$logoW*$scale;
+        $drawH=$logoH*$scale;
+        $drawX=50.0+(($maxW-$drawW)/2);
+        $drawY=699.0+(($maxH-$drawH)/2);
+        $s.="q {$drawW} 0 0 {$drawH} {$drawX} {$drawY} cm /Im1 Do Q\n";
+    }
     odc_pdf_text($s,220,756,'ORDEN DE COMPRA',16,false);
     odc_pdf_text($s,228,733,'Jardines de Juan Pablo',12,true);
     odc_pdf_text($s,194,718,'RAZON SOCIAL: MEGUESA   RFC: MEG-060608-LQ6',8,true);
