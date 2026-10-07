@@ -136,6 +136,43 @@ function ordenes_try_prepare_schema(): array {
 }
 
 function ordenes_map(array $values,bool $all=true): array {
-    $out=[];$missing=[]; foreach($values as $k=>$v){$f=ordenes_field((string)$k;if(false){});}
+    $out=[]; $missing=[];
+    foreach($values as $k=>$v){
+        $field=ordenes_field((string)$k);
+        if($field===null){
+            if($all && $k!=='Title') $missing[]=(string)$k;
+            continue;
+        }
+        $out[$field]=$v;
+    }
+    if($missing) throw new RuntimeException('Faltan columnas en '.ORDENES_LIST_TITLE.': '.implode(', ',$missing).'.');
     return $out;
+}
+
+function ordenes_create_item(array $values): array {
+    $s=ordenes_session(); $payload=ordenes_map($values,true);
+    $json=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    if(!is_string($json)) throw new RuntimeException('No fue posible preparar el registro.');
+    return ordenes_http_json(ordenes_list_base().'/items','POST',[
+        'Authorization: Bearer '.$s['token'],'Accept: application/json;odata=nometadata','Content-Type: application/json;odata=nometadata'
+    ],$json);
+}
+
+function ordenes_get_item(int $id): array {
+    if($id<=0) throw new InvalidArgumentException('ID invalido.');
+    $s=ordenes_session();
+    return ordenes_http_json(ordenes_list_base().'/items('.$id.')','GET',[
+        'Authorization: Bearer '.$s['token'],'Accept: application/json;odata=nometadata'
+    ]);
+}
+
+function ordenes_update_item(int $id,array $values): void {
+    if($id<=0) throw new InvalidArgumentException('ID invalido.');
+    $s=ordenes_session(); $payload=ordenes_map($values,true);
+    $json=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    if(!is_string($json)) throw new RuntimeException('No fue posible preparar la actualizacion.');
+    ordenes_http_json(ordenes_list_base().'/items('.$id.')','POST',[
+        'Authorization: Bearer '.$s['token'],'Accept: application/json;odata=nometadata','Content-Type: application/json;odata=nometadata',
+        'IF-MATCH: *','X-HTTP-Method: MERGE'
+    ],$json);
 }
