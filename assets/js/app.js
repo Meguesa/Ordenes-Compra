@@ -207,7 +207,7 @@
       return;
     }
     try {
-      const result = await apiRequest('index.php?action=diagnostico');
+      const result = await apiRequest('nueva.php?action=diagnostico');
       if (result.ready) {
         $('sharepointStatus').className = 'sharepoint-status ok';
         $('sharepointStatus').textContent = 'SharePoint listo · BI_Ordenes_Compra conectada.';
@@ -227,7 +227,7 @@
     button.textContent = 'Preparando…';
     $('sharepointStatus').textContent = 'Creando columnas faltantes en BI_Ordenes_Compra…';
     try {
-      const result = await apiRequest('index.php?action=preparar', {
+      const result = await apiRequest('nueva.php?action=preparar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
@@ -517,7 +517,14 @@
   }
 
   let restored = null;
-  try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
   if (restored) populateDraft(restored); else addItem();
 
   if (context.saveOk && context.folio) {
