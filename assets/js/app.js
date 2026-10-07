@@ -274,52 +274,89 @@
 
   function preview() {
     const d = currentData();
-    const itemRows = d.items.filter((x) => x.description || x.amount > 0).map((x) => `
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
       <tr>
-        <td>${x.qty || ''}</td>
-        <td>${escapeHtml(x.description || '—')}</td>
-        <td>${money(x.price)}</td>
-        <td>${money(x.amount)}</td>
-      </tr>`).join('') || '<tr><td colspan="4" style="text-align:center">Sin partidas capturadas</td></tr>';
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
 
     $('previewContent').innerHTML = `
-      <div class="preview-top">
-        <div class="preview-logo-title"><img class="preview-logo" src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo"><h3>ORDEN DE COMPRA</h3></div>
-        <div class="preview-number">No. ${escapeHtml(d.folio || 'PENDIENTE')}<br><span>${formatDate(d.fecha)}</span></div>
-      </div>
-      <div class="preview-company">
-        <strong>Jardines de Juan Pablo</strong><br>
-        RAZÓN SOCIAL: MEGUESA &nbsp;&nbsp; RFC: MEG-060608-LQ6<br>
-        CALLE: CHURUBUSCO NORTE No. 217 &nbsp; COLONIA: CHURUBUSCO<br>
-        MONTERREY, N.L. C.P. 64590
-      </div>
-      <div class="preview-provider">
-        <div><strong>EMPRESA:</strong> ${escapeHtml(d.proveedor || '—')}</div>
-        <div><strong>TELÉFONO:</strong> ${escapeHtml(d.telefono || '—')}</div>
-        <div><strong>RFC:</strong> ${escapeHtml(d.rfc || '—')}</div>
-        <div><strong>T. ENTREGA:</strong> ${escapeHtml(d.tiempoEntrega || '—')}</div>
-        <div><strong>DOMICILIO:</strong> ${escapeHtml(d.domicilio || '—')}</div>
-        <div></div>
-        <div><strong>CIUDAD/ESTADO:</strong> ${escapeHtml(d.ciudadEstado || '—')}</div>
-        <div><strong>T. CAMBIO:</strong> ${d.tipoCambio || 1}</div>
-        <div><strong>COND. DE PAGO:</strong> ${escapeHtml(d.condicionPago || '—')}</div>
-        <div><strong>MONEDA:</strong> ${escapeHtml(d.moneda)}</div>
-      </div>
-      <table class="preview-table">
-        <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO UNITARIO</th><th>IMPORTE</th></tr></thead>
-        <tbody>${itemRows}</tbody>
-      </table>
-      <div class="preview-bottom">
-        <div>
-          <div class="preview-requester"><strong>CONFIRMACIÓN DE REQUISICIÓN</strong><br><br><strong>NOMBRE:</strong> ${escapeHtml(d.user.name || 'Usuario')}<br><strong>CORREO:</strong> ${escapeHtml(d.user.email || '—')}</div>
-          <div class="preview-bank" style="margin-top:22px"><strong>DATOS BANCARIOS</strong><br><strong>Banco:</strong> ${escapeHtml(d.banco || '—')}<br><strong>No. Cuenta:</strong> ${escapeHtml(d.cuenta || '—')}<br><strong>No. CLABE:</strong> ${escapeHtml(d.clabe || '—')}</div>
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+            <div class="odc-anniversary"><strong>20</strong><span>AÑOS</span></div>
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
         </div>
-        <div class="preview-totals">
-          <div><span>SUBTOTAL</span><strong>${money(d.subtotal)}</strong></div>
-          <div><span>IVA ${d.ivaPct ? d.ivaPct + '%' : ''}</span><strong>${money(d.iva)}</strong></div>
-          <div><span>RETENCIÓN ISR</span><strong>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</strong></div>
-          <div><span>RETENCIÓN IVA</span><strong>${d.retIva ? '-' + money(d.retIva) : money(0)}</strong></div>
-          <div class="grand"><span>TOTAL</span><strong>${money(d.total)}</strong></div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>`;
 
