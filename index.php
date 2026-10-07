@@ -54,11 +54,15 @@ if (!$prototypeMode && isset($_GET['action'])) {
 
         if ($action === 'diagnostico') {
             $missing = ordenes_missing_schema_fields();
+            $missingRequired = array_values(array_intersect($missing, ordenes_required_schema_fields()));
+            $missingOptional = array_values(array_diff($missing, $missingRequired));
             echo json_encode([
                 'ok' => true,
                 'list' => ORDENES_LIST_TITLE,
-                'ready' => count($missing) === 0,
+                'ready' => count($missingRequired) === 0,
                 'missing' => $missing,
+                'missingRequired' => $missingRequired,
+                'missingOptional' => $missingOptional,
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             exit;
         }
@@ -127,7 +131,7 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-3">
+  <link rel="stylesheet" href="styles.css?v=20261007-4">
 </head>
 <body>
 <header class="tool-header">
@@ -403,6 +407,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'saveError' => $saveError,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-3"></script>
+<script src="assets/js/app.js?v=20261007-4"></script>
 </body>
 </html>
