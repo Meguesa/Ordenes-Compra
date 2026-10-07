@@ -238,3 +238,26 @@ button{cursor:pointer}
   .odc-company-name{font-size:16px}
   .odc-number{font-size:15px}
 }
+
+
+.date-input-wrap{position:relative;display:flex;align-items:center}
+.date-input-wrap #fechaDisplay{padding-right:48px}
+.date-picker-button{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:36px;height:36px;display:grid;place-items:center;
+  border:0;border-radius:7px;background:transparent;color:#5f554f;padding:0
+}
+.date-picker-button:hover,.date-picker-button:focus-visible{background:#f5f2ed;color:var(--jp-brown);outline:none}
+.date-picker-button svg{width:19px;height:19px}
+.date-native-picker{
+  position:absolute;
+  right:6px;
+  bottom:0;
+  width:36px!important;
+  min-height:1px!important;
+  height:1px!important;
+  padding:0!important;
+  border:0!important;
+  opacity:0;
+  pointer-events:none
+}
