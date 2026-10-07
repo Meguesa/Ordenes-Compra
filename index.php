@@ -91,7 +91,7 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
             $mailPayload = json_decode($decoded, true);
             if (!is_array($mailPayload)) throw new RuntimeException('Los datos recibidos no son validos.');
 
-            $mailResult = ordenes_send_test_email($mailPayload, $user);
+            $mailResult = ordenes_send_test_email($mailPayload, $user, is_array($_FILES['attachments'] ?? null) ? $_FILES['attachments'] : []);
         }
     } catch (Throwable $error) {
         $mailError = $error->getMessage();
@@ -185,7 +185,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-7">
+  <link rel="stylesheet" href="styles.css?v=20261007-8">
 </head>
 <body>
 <header class="tool-header">
@@ -246,7 +246,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
     <button id="btnPrepareSharepoint" class="mini-button" type="button" hidden>Preparar lista SharePoint</button>
   </div>
 
-  <form id="odcForm" class="odc-form" method="post" action="/ordenes-compra/" novalidate>
+  <form id="odcForm" class="odc-form" method="post" action="/ordenes-compra/" enctype="multipart/form-data" novalidate>
     <input type="hidden" name="form_action" value="save_draft">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['ordenes_csrf'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
     <input type="hidden" id="draftPayload" name="draft_payload" value="">
@@ -441,6 +441,22 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
       </label>
     </section>
 
+    <section class="form-section">
+      <div class="section-title">
+        <span>8</span>
+        <div>
+          <h2>Adjuntos</h2>
+          <p>Los archivos se enviarán únicamente por correo. No se guardan en SharePoint ni en el servidor.</p>
+        </div>
+      </div>
+      <label class="attachment-upload">
+        <span>Documentos e imágenes</span>
+        <input id="attachments" name="attachments[]" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
+        <small>Hasta 5 archivos · máximo combinado 2.5 MB durante la prueba.</small>
+      </label>
+      <div id="attachmentList" class="attachment-list">Sin archivos seleccionados.</div>
+    </section>
+
     <section class="form-actions-panel">
       <div class="form-status">
         <strong>Versión de prueba</strong>
@@ -489,6 +505,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'mailFolio' => is_array($mailPayload) ? (string)($mailPayload['folio'] ?? '') : '',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-7"></script>
+<script src="assets/js/app.js?v=20261007-8"></script>
 </body>
 </html>
