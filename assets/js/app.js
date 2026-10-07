@@ -364,7 +364,7 @@
       <div class="odc-sheet">
         <div class="odc-top-grid">
           <div class="odc-brandmark">
-            <img src="assets/odc-logo.jpg" alt="Jardines de Juan Pablo">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
           </div>
 
           <div class="odc-title-block">
@@ -464,6 +464,23 @@
   bindTaxToggle('aplicaRetIsr', 'retIsrPct');
   bindTaxToggle('aplicaRetIva', 'retIvaPct');
   $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
   if ($('fechaDisplay')) {
     $('fechaDisplay').addEventListener('input', () => {
       let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
