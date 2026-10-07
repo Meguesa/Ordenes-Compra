@@ -104,7 +104,7 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-1">
+  <link rel="stylesheet" href="styles.css?v=20261007-2">
 </head>
 <body>
 <header class="tool-header">
@@ -215,6 +215,9 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
           <input id="telefono" type="tel" placeholder="Teléfono">
         </label>
 
+        <label class="span-2">Domicilio
+          <input id="domicilio" type="text" placeholder="Calle, número, colonia">
+        </label>
         <label class="span-2">Ciudad y estado
           <input id="ciudadEstado" type="text" placeholder="Ej. Monterrey, Nuevo León">
         </label>
@@ -371,6 +374,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'folio' => '',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-1"></script>
+<script src="assets/js/app.js?v=20261007-2"></script>
 </body>
 </html>
