@@ -350,3 +350,149 @@ function ordenes_save_draft_payload(array $input, array $user): array
         ],
     ];
 }
+
+
+function ordenes_mail_graph_token(): string
+{
+    $path='/home/juanpab1/portal-config/config.php';
+    if(!is_file($path)) throw new RuntimeException('No se encontro la configuracion privada del Portal.');
+    $raw=require $path;
+    if(!is_array($raw)) throw new RuntimeException('La configuracion privada del Portal no es valida.');
+
+    $tenant=trim((string)($raw['registro_servicios_tenant_id']??''));
+    $client=trim((string)($raw['registro_servicios_client_id']??''));
+    $secret=trim((string)($raw['registro_servicios_client_secret']??''));
+    if($tenant===''||$client===''||$secret==='') {
+        throw new RuntimeException('Faltan credenciales de correo de Registro de Servicios.');
+    }
+
+    $url='https://login.microsoftonline.com/'.rawurlencode($tenant).'/oauth2/v2.0/token';
+    $body=http_build_query([
+        'client_id'=>$client,
+        'client_secret'=>$secret,
+        'scope'=>'https://graph.microsoft.com/.default',
+        'grant_type'=>'client_credentials',
+    ],'','&',PHP_QUERY_RFC3986);
+
+    $curl=curl_init($url);
+    if($curl===false) throw new RuntimeException('No fue posible iniciar autenticacion de correo.');
+    curl_setopt_array($curl,[
+        CURLOPT_RETURNTRANSFER=>true,
+        CURLOPT_CONNECTTIMEOUT=>10,
+        CURLOPT_TIMEOUT=>30,
+        CURLOPT_POST=>true,
+        CURLOPT_POSTFIELDS=>$body,
+        CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded','Accept: application/json'],
+        CURLOPT_SSL_VERIFYPEER=>true,
+        CURLOPT_SSL_VERIFYHOST=>2,
+    ]);
+    $response=curl_exec($curl);
+    $status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
+    $error=curl_error($curl);
+    curl_close($curl);
+
+    if($response===false) throw new RuntimeException('La autenticacion de correo fallo: '.$error);
+    $data=json_decode((string)$response,true);
+    if($status<200||$status>=300) {
+        $detail=is_array($data)?trim((string)($data['error_description']??$data['error']??'')):'';
+        throw new RuntimeException('Microsoft Entra respondio HTTP '.$status.($detail!==''?': '.$detail:'.'));
+    }
+
+    $token=trim((string)($data['access_token']??''));
+    if($token==='') throw new RuntimeException('Microsoft Entra no devolvio token de correo.');
+    return $token;
+}
+
+function ordenes_send_test_email(array $input,array $user): array
+{
+    $folio=trim((string)($input['folio']??''));
+    $itemId=(int)($input['itemId']??0);
+
+    if($itemId<=0 || !preg_match('/^ODC-PREVIEW-\d{6,}$/',$folio)) {
+        throw new RuntimeException('Guarda primero la ODC como borrador antes de enviar el correo de prueba.');
+    }
+
+    if(!ordenes_user_has_preview_access($user)) {
+        throw new RuntimeException('Tu cuenta no puede enviar correos de prueba.');
+    }
+
+    $recipient='gabriel.guerra@juanpablo.com.mx';
+    $sender='sistemas@juanpablo.com.mx';
+    $proveedor=trim((string)($input['proveedor']??''));
+    $observaciones=trim((string)($input['observaciones']??''));
+    $moneda=strtoupper(trim((string)($input['moneda']??'MXN')));
+    $total=(float)($input['total']??0);
+
+    $h=static fn(string $value):string=>htmlspecialchars($value,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+    $totalText=($moneda==='USD'?'US$':'$').number_format($total,2,'.',',');
+    $obsHtml=$observaciones!==''?nl2br($h($observaciones)):'<em>Sin observaciones.</em>';
+
+    $html='<!doctype html><html><body style="margin:0;background:#f5f1ec;font-family:Arial,sans-serif;color:#2b1b15">'
+      .'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 10px;background:#f5f1ec"><tr><td align="center">'
+      .'<table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#fff;border:1px solid #e4d9cf;border-radius:12px;overflow:hidden">'
+      .'<tr><td style="padding:22px 26px;border-top:5px solid #e28a16">'
+      .'<div style="font-size:11px;letter-spacing:1.4px;font-weight:700;color:#225b8a">JARDINES DE JUAN PABLO · PRUEBA</div>'
+      .'<h1 style="font-size:22px;margin:8px 0 4px">Orden de Compra '.$h($folio).'</h1>'
+      .'<p style="margin:0;color:#6b625d">Correo de prueba del nuevo flujo de Órdenes de Compra.</p>'
+      .'</td></tr><tr><td style="padding:0 26px 24px">'
+      .'<table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse;font-size:14px">'
+      .'<tr><td style="font-weight:700;border-bottom:1px solid #eee7e1">Proveedor</td><td style="border-bottom:1px solid #eee7e1">'.$h($proveedor).'</td></tr>'
+      .'<tr><td style="font-weight:700;border-bottom:1px solid #eee7e1">Total</td><td style="border-bottom:1px solid #eee7e1">'.$h($totalText).'</td></tr>'
+      .'<tr><td style="font-weight:700;border-bottom:1px solid #eee7e1">Solicitante</td><td style="border-bottom:1px solid #eee7e1">'.$h((string)($user['name']??'')).'</td></tr>'
+      .'</table>'
+      .'<div style="margin-top:20px;padding:14px 16px;background:#fff8e6;border:1px solid #efd48a;border-radius:8px">'
+      .'<strong>Observaciones</strong><div style="margin-top:8px;line-height:1.5">'.$obsHtml.'</div></div>'
+      .'<p style="margin:20px 0 0;color:#756a64;font-size:12px">Durante esta etapa de pruebas, el único destinatario es '.$h($recipient).'.</p>'
+      .'</td></tr></table></td></tr></table></body></html>';
+
+    $request=[
+        'message'=>[
+            'subject'=>'[PRUEBA] Orden de Compra '.$folio.' | '.$proveedor,
+            'body'=>['contentType'=>'HTML','content'=>$html],
+            'toRecipients'=>[['emailAddress'=>['address'=>$recipient]]],
+        ],
+        'saveToSentItems'=>true,
+    ];
+
+    $json=json_encode($request,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    if(!is_string($json)) throw new RuntimeException('No fue posible preparar el correo.');
+
+    $token=ordenes_mail_graph_token();
+    $curl=curl_init('https://graph.microsoft.com/v1.0/users/'.rawurlencode($sender).'/sendMail');
+    if($curl===false) throw new RuntimeException('No fue posible iniciar el envio del correo.');
+
+    curl_setopt_array($curl,[
+        CURLOPT_RETURNTRANSFER=>true,
+        CURLOPT_FOLLOWLOCATION=>false,
+        CURLOPT_CONNECTTIMEOUT=>10,
+        CURLOPT_TIMEOUT=>40,
+        CURLOPT_POST=>true,
+        CURLOPT_POSTFIELDS=>$json,
+        CURLOPT_HTTPHEADER=>[
+            'Authorization: Bearer '.$token,
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+        CURLOPT_SSL_VERIFYPEER=>true,
+        CURLOPT_SSL_VERIFYHOST=>2,
+    ]);
+
+    $response=curl_exec($curl);
+    $status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
+    $error=curl_error($curl);
+    curl_close($curl);
+
+    if($response===false) throw new RuntimeException('El envio de correo fallo: '.$error);
+    if(!in_array($status,[200,202,204],true)) {
+        $decoded=json_decode((string)$response,true);
+        $detail=is_array($decoded)?trim((string)($decoded['error']['message']??'')):'';
+        throw new RuntimeException('Microsoft Graph respondio HTTP '.$status.($detail!==''?': '.$detail:'.'));
+    }
+
+    return [
+        'ok'=>true,
+        'recipient'=>$recipient,
+        'sender'=>$sender,
+        'folio'=>$folio,
+    ];
+}
