@@ -185,7 +185,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-6">
+  <link rel="stylesheet" href="styles.css?v=20261007-7">
 </head>
 <body>
 <header class="tool-header">
@@ -268,8 +268,15 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
           </select>
         </label>
         <label>Fecha
-          <input id="fechaDisplay" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="dd/mm/aaaa" value="<?= htmlspecialchars($todayDisplay, ENT_QUOTES, 'UTF-8') ?>" required>
-          <input id="fecha" type="hidden" value="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>">
+          <div class="date-input-wrap">
+            <input id="fechaDisplay" type="text" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="dd/mm/aaaa" value="<?= htmlspecialchars($todayDisplay, ENT_QUOTES, 'UTF-8') ?>" required>
+            <button id="fechaPickerButton" class="date-picker-button" type="button" aria-label="Abrir selector de fecha" title="Seleccionar fecha">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 2v3M17 2v3M3 9h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <input id="fecha" class="date-native-picker" type="date" value="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>" tabindex="-1" aria-hidden="true">
+          </div>
         </label>
         <label>Folio
           <input type="text" value="Se genera automáticamente" readonly>
@@ -482,6 +489,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'mailFolio' => is_array($mailPayload) ? (string)($mailPayload['folio'] ?? '') : '',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-6"></script>
+<script src="assets/js/app.js?v=20261007-7"></script>
 </body>
 </html>
