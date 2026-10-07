@@ -171,22 +171,26 @@ function ordenes_try_prepare_schema(): array {
     ordenes_fields(true); return ['created'=>$created,'errors'=>$errors,'missing'=>ordenes_missing_schema_fields()];
 }
 
-function ordenes_map(array $values,bool $all=true): array {
+function ordenes_required_schema_fields(): array {
+    return ['Folio','Fecha','Proveedor','PartidasJson','Subtotal','IVA','RetencionISR','RetencionIVA','Total','SolicitanteCorreo','Estado','Ambiente'];
+}
+
+function ordenes_map(array $values,array $required=[]): array {
     $out=[]; $missing=[];
     foreach($values as $k=>$v){
         $field=ordenes_field((string)$k);
         if($field===null){
-            if($all && $k!=='Title') $missing[]=(string)$k;
+            if(in_array((string)$k,$required,true)) $missing[]=(string)$k;
             continue;
         }
         $out[$field]=$v;
     }
-    if($missing) throw new RuntimeException('Faltan columnas en '.ORDENES_LIST_TITLE.': '.implode(', ',$missing).'.');
+    if($missing) throw new RuntimeException('Faltan columnas requeridas en '.ORDENES_LIST_TITLE.': '.implode(', ',$missing).'.');
     return $out;
 }
 
 function ordenes_create_item(array $values): array {
-    $s=ordenes_session(); $payload=ordenes_map($values,true);
+    $s=ordenes_session(); $payload=ordenes_map($values,ordenes_required_schema_fields());
     $json=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     if(!is_string($json)) throw new RuntimeException('No fue posible preparar el registro.');
     return ordenes_http_json(ordenes_list_base().'/items','POST',[
@@ -204,7 +208,7 @@ function ordenes_get_item(int $id): array {
 
 function ordenes_update_item(int $id,array $values): void {
     if($id<=0) throw new InvalidArgumentException('ID invalido.');
-    $s=ordenes_session(); $payload=ordenes_map($values,true);
+    $s=ordenes_session(); $payload=ordenes_map($values,[]);
     $json=json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     if(!is_string($json)) throw new RuntimeException('No fue posible preparar la actualizacion.');
     ordenes_http_json(ordenes_list_base().'/items('.$id.')','POST',[
@@ -222,8 +226,9 @@ function ordenes_num_value(mixed $value): float
 function ordenes_save_draft_payload(array $input, array $user): array
 {
     $missingSchema = ordenes_missing_schema_fields();
-    if (count($missingSchema) > 0) {
-        throw new RuntimeException('SCHEMA_MISSING:' . implode(',', $missingSchema));
+    $missingRequired = array_values(array_intersect($missingSchema, ordenes_required_schema_fields()));
+    if (count($missingRequired) > 0) {
+        throw new RuntimeException('Faltan columnas requeridas en ' . ORDENES_LIST_TITLE . ': ' . implode(', ', $missingRequired) . '.');
     }
 
     $userName = trim((string)($user['name'] ?? 'Usuario'));
