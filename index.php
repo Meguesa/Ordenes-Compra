@@ -1,0 +1,304 @@
+<?php
+
+declare(strict_types=1);
+
+$root = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
+$bootstrap = $root . '/includes/bootstrap.php';
+$prototypeMode = !is_file($bootstrap);
+
+if (!$prototypeMode) {
+    require_once $bootstrap;
+    portal_require_authentication();
+    require_once __DIR__ . '/includes/ordenes-access.php';
+    ordenes_require_preview_access();
+    $user = portal_user();
+    if (empty($_SESSION['ordenes_csrf']) || !is_string($_SESSION['ordenes_csrf'])) {
+        $_SESSION['ordenes_csrf'] = bin2hex(random_bytes(24));
+    }
+} else {
+    $user = [
+        'name' => 'Gabriel Guerra',
+        'email' => 'gabriel.guerra@juanpablo.com.mx',
+    ];
+}
+
+$name = htmlspecialchars(trim((string)($user['name'] ?? 'Usuario')), ENT_QUOTES, 'UTF-8');
+$email = htmlspecialchars(strtolower(trim((string)($user['email'] ?? ''))), ENT_QUOTES, 'UTF-8');
+$today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->format('Y-m-d');
+?><!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>Órdenes de Compra | Jardines de Juan Pablo</title>
+  <link rel="stylesheet" href="styles.css?v=20261007-1">
+</head>
+<body>
+<header class="tool-header">
+  <div class="shell tool-header-inner">
+    <div class="tool-brand">
+      <img class="tool-logo" src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo" onerror="this.style.display='none'">
+      <div class="tool-identity">
+        <strong>Órdenes de Compra</strong>
+        <span>Portal Interno JdJP · Jardines de Juan Pablo</span>
+      </div>
+    </div>
+
+    <div class="tool-header-context">Captura y generación de órdenes de compra</div>
+
+    <div class="tool-header-actions">
+      <a class="header-action" href="/">Regresar al portal</a>
+      <details class="account-menu">
+        <summary class="account-trigger" aria-label="Abrir menú de usuario" title="<?= $name ?>">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" fill="currentColor"/>
+            <path d="M4 20c0-4.1 3.6-6 8-6s8 1.9 8 6v1H4z" fill="currentColor"/>
+          </svg>
+        </summary>
+        <div class="account-menu-panel">
+          <div class="account-menu-info">
+            <strong><?= $name ?></strong>
+            <span><?= $email ?></span>
+          </div>
+          <?php if (!$prototypeMode): ?>
+          <a class="account-menu-logout" href="/logout.php">Cerrar sesión</a>
+          <?php endif; ?>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main class="shell main-content">
+  <section class="form-banner">
+    <div>
+      <span class="status-pill">EN DESARROLLO</span>
+      <p class="eyebrow">Nueva orden de compra</p>
+      <h1>Captura de ODC</h1>
+      <p>Completa la información del proveedor y de la compra. Los importes y totales se calculan automáticamente.</p>
+    </div>
+    <div class="banner-meta">
+      <div><span>Folio</span><strong id="folioDisplay">PENDIENTE</strong></div>
+      <div><span>Fecha</span><strong><?= htmlspecialchars((new DateTimeImmutable($today))->format('d/m/Y'), ENT_QUOTES, 'UTF-8') ?></strong></div>
+    </div>
+  </section>
+
+  <div class="development-note">
+    <div>
+      <strong>Vista previa controlada</strong>
+      <span>Los borradores se registran en BI_Ordenes_Compra. Esta versión todavía no genera folios oficiales, PDF definitivo ni correos a Finanzas.</span>
+      <span id="sharepointStatus" class="sharepoint-status">Verificando conexión con SharePoint…</span>
+    </div>
+    <button id="btnPrepareSharepoint" class="mini-button" type="button" hidden>Preparar lista SharePoint</button>
+  </div>
+
+  <form id="odcForm" class="odc-form" novalidate>
+    <section class="form-section">
+      <div class="section-title">
+        <span>1</span>
+        <div>
+          <h2>Datos generales</h2>
+          <p>Empresa compradora, fecha y solicitante de la orden.</p>
+        </div>
+      </div>
+
+      <div class="form-grid grid-4">
+        <label class="span-2">Empresa compradora
+          <select id="empresaCompradora" required>
+            <option value="MEGUESA" selected>MEGUESA, S.A. de C.V.</option>
+          </select>
+        </label>
+        <label>Fecha
+          <input id="fecha" type="date" value="<?= htmlspecialchars($today, ENT_QUOTES, 'UTF-8') ?>" required>
+        </label>
+        <label>Folio
+          <input type="text" value="Se genera automáticamente" readonly>
+        </label>
+      </div>
+
+      <div class="company-summary">
+        <div><span>RFC</span><strong>MEG-060608-LQ6</strong></div>
+        <div class="company-address"><span>Domicilio</span><strong>Churubusco Norte No. 217, Col. Churubusco, Monterrey, N.L. C.P. 64590</strong></div>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <div class="section-title">
+        <span>2</span>
+        <div>
+          <h2>Datos del proveedor</h2>
+          <p>Información fiscal y condiciones de la compra.</p>
+        </div>
+      </div>
+
+      <div class="form-grid grid-4">
+        <label class="span-2">Empresa / Razón social *
+          <input id="proveedor" type="text" autocomplete="organization" required placeholder="Nombre o razón social del proveedor">
+        </label>
+        <label>RFC *
+          <input id="rfc" type="text" maxlength="13" required placeholder="RFC del proveedor">
+        </label>
+        <label>Teléfono
+          <input id="telefono" type="tel" placeholder="Teléfono">
+        </label>
+
+        <label class="span-2">Ciudad y estado
+          <input id="ciudadEstado" type="text" placeholder="Ej. Monterrey, Nuevo León">
+        </label>
+        <label>Condición de pago *
+          <input id="condicionPago" type="text" required placeholder="Ej. Pago total / Crédito 30 días">
+        </label>
+        <label>Tiempo de entrega
+          <input id="tiempoEntrega" type="text" placeholder="Ej. 5 días hábiles">
+        </label>
+
+        <label>Moneda *
+          <select id="moneda" required>
+            <option value="MXN" selected>MXN · Peso mexicano</option>
+            <option value="USD">USD · Dólar estadounidense</option>
+          </select>
+        </label>
+        <label>Tipo de cambio
+          <input id="tipoCambio" type="number" min="0" step="0.0001" value="1.0000">
+        </label>
+      </div>
+    </section>
+
+    <section class="form-section">
+      <div class="section-heading-row">
+        <div class="section-title compact">
+          <span>3</span>
+          <div>
+            <h2>Detalle de la compra</h2>
+            <p>Agrega únicamente las partidas necesarias.</p>
+          </div>
+        </div>
+        <button id="btnAddItem" class="secondary-button add-item" type="button">+ Agregar partida</button>
+      </div>
+
+      <div class="items-wrap">
+        <div class="items-header" aria-hidden="true">
+          <span>Cantidad</span><span>Descripción</span><span>Precio unitario</span><span>Importe</span><span></span>
+        </div>
+        <div id="itemsList" class="items-list"></div>
+      </div>
+    </section>
+
+    <div class="two-column-layout">
+      <section class="form-section banking-section">
+        <div class="section-title">
+          <span>4</span>
+          <div>
+            <h2>Datos bancarios</h2>
+            <p>Información para el pago al proveedor.</p>
+          </div>
+        </div>
+        <div class="form-grid grid-2">
+          <label>Banco
+            <input id="banco" type="text" placeholder="Nombre del banco">
+          </label>
+          <label>No. de cuenta
+            <input id="cuenta" type="text" inputmode="numeric" placeholder="Número de cuenta">
+          </label>
+          <label class="span-2">CLABE
+            <input id="clabe" type="text" inputmode="numeric" maxlength="18" placeholder="18 dígitos">
+          </label>
+        </div>
+      </section>
+
+      <section class="form-section totals-section">
+        <div class="section-title">
+          <span>5</span>
+          <div>
+            <h2>Impuestos y total</h2>
+            <p>Activa solamente los conceptos aplicables.</p>
+          </div>
+        </div>
+
+        <div class="tax-controls">
+          <label class="tax-row active-tax">
+            <span><input id="aplicaIva" type="checkbox" checked> Aplicar IVA</span>
+            <span class="percent-control"><input id="ivaPct" type="number" min="0" max="100" step="0.01" value="16">%</span>
+          </label>
+          <label class="tax-row">
+            <span><input id="aplicaRetIsr" type="checkbox"> Retención ISR</span>
+            <span class="percent-control"><input id="retIsrPct" type="number" min="0" max="100" step="0.01" value="0" disabled>%</span>
+          </label>
+          <label class="tax-row">
+            <span><input id="aplicaRetIva" type="checkbox"> Retención IVA</span>
+            <span class="percent-control"><input id="retIvaPct" type="number" min="0" max="100" step="0.01" value="0" disabled>%</span>
+          </label>
+        </div>
+
+        <div class="totals-card">
+          <div><span>Subtotal</span><strong id="subtotal">$0.00</strong></div>
+          <div><span>IVA</span><strong id="iva">$0.00</strong></div>
+          <div><span>Retención ISR</span><strong id="retIsr">$0.00</strong></div>
+          <div><span>Retención IVA</span><strong id="retIva">$0.00</strong></div>
+          <div class="grand-total"><span>TOTAL</span><strong id="total">$0.00</strong></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="form-section requester-section">
+      <div class="section-title">
+        <span>6</span>
+        <div>
+          <h2>Solicitante</h2>
+          <p>La información se toma automáticamente de la sesión activa del Portal.</p>
+        </div>
+      </div>
+      <div class="requester-card">
+        <div class="avatar"><?= htmlspecialchars(strtoupper(substr($name !== '' ? $name : 'U', 0, 1)), ENT_QUOTES, 'UTF-8') ?></div>
+        <div>
+          <strong><?= $name ?></strong>
+          <span><?= $email ?></span>
+        </div>
+        <span class="locked-pill">Automático</span>
+      </div>
+    </section>
+
+    <section class="form-actions-panel">
+      <div class="form-status">
+        <strong>Versión de prueba</strong>
+        <span id="formStatus">Captura una partida para calcular el total.</span>
+      </div>
+      <div class="form-actions">
+        <button id="btnDraft" class="secondary-button" type="button">Guardar borrador</button>
+        <button id="btnPreview" class="secondary-button" type="button">Vista previa PDF</button>
+        <button class="primary-button" type="button" disabled title="Se habilitará al conectar el flujo productivo">Generar y enviar a Finanzas</button>
+      </div>
+    </section>
+  </form>
+</main>
+
+<div id="previewModal" class="modal" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+    <div class="modal-header">
+      <div>
+        <span class="status-pill">VISTA PREVIA</span>
+        <h2 id="previewTitle">Orden de Compra</h2>
+      </div>
+      <button class="modal-close" type="button" aria-label="Cerrar" data-close-modal>×</button>
+    </div>
+    <div id="previewContent" class="pdf-preview"></div>
+    <div class="modal-actions">
+      <button class="secondary-button" type="button" data-close-modal>Cerrar</button>
+    </div>
+  </section>
+</div>
+
+<script>
+window.ODC_CONTEXT = <?= json_encode([
+    'user' => ['name' => html_entity_decode($name), 'email' => html_entity_decode($email)],
+    'prototype' => $prototypeMode,
+    'csrf' => $prototypeMode ? '' : (string)($_SESSION['ordenes_csrf'] ?? ''),
+    'itemId' => 0,
+    'folio' => '',
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+</script>
+<script src="assets/js/app.js?v=20261007-1"></script>
+</body>
+</html>
