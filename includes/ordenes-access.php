@@ -524,7 +524,7 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
         throw new RuntimeException('Tu cuenta no puede enviar correos de prueba.');
     }
 
-    $recipient='gabriel.guerra@juanpablo.com.mx';
+    $recipient='finanzas@juanpablo.com.mx';
     $sender='sistemas@juanpablo.com.mx';
     $proveedor=trim((string)($input['proveedor']??''));
     $observaciones=trim((string)($input['observaciones']??''));
