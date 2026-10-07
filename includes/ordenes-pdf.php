@@ -56,7 +56,7 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
     $fecha=odc_pdf_date(trim((string)($d['fecha']??'')));
 
     $logoBytes=''; $logoW=0; $logoH=0;
-    $logoPath=rtrim($documentRoot,'/').'/ordenes-compra/assets/odc-logo.jpg';
+    $logoPath=rtrim($documentRoot,'/').'/mapa/assets/logo.jpg';
     if(is_file($logoPath)){
         $info=@getimagesize($logoPath); $bytes=@file_get_contents($logoPath);
         if(is_array($info)&&is_string($bytes)&&$bytes!==''&&(($info[2]??0)===IMAGETYPE_JPEG)){
