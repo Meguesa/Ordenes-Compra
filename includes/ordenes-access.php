@@ -326,7 +326,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
         $emailField = ordenes_field('SolicitanteCorreo');
         $existingOwner = $emailField !== null ? strtolower(trim((string)($existing[$emailField] ?? ''))) : '';
         if ($existingOwner !== '' && $existingOwner !== $userEmail) throw new RuntimeException('No tienes permiso para modificar este borrador.');
-        if ($folio === '' || preg_match('/^ODC-PREVIEW-\\d+$/', $folio)) $folio = str_pad((string)$itemId, 4, '0', STR_PAD_LEFT);
+        if ($folio === '' || preg_match('/^ODC-PREVIEW-\\d+$/', $folio) || preg_match('/^0{0,3}[12]$/', $folio)) $folio = str_pad((string)(38 + $itemId), 4, '0', STR_PAD_LEFT);
         $values['Title'] = $folio;
         $values['Folio'] = $folio;
         ordenes_update_item($itemId, $values);
@@ -334,7 +334,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
         $created = ordenes_create_item($values);
         $itemId = (int)($created['Id'] ?? $created['ID'] ?? 0);
         if ($itemId <= 0) throw new RuntimeException('SharePoint creo el registro, pero no devolvio su identificador.');
-        $folio = str_pad((string)$itemId, 4, '0', STR_PAD_LEFT);
+        $folio = str_pad((string)(38 + $itemId), 4, '0', STR_PAD_LEFT);
         ordenes_update_item($itemId, ['Title' => $folio, 'Folio' => $folio]);
     }
 
@@ -516,7 +516,7 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
     $folio=trim((string)($input['folio']??''));
     $itemId=(int)($input['itemId']??0);
 
-    if($itemId<=0 || !preg_match('/^ODC-PREVIEW-\d{6,}$/',$folio)) {
+    if($itemId<=0 || !preg_match('/^\d{4,}$/',$folio)) {
         throw new RuntimeException('Guarda primero la ODC como borrador antes de enviar el correo de prueba.');
     }
 
