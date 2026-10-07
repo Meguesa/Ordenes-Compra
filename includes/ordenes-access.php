@@ -106,7 +106,7 @@ function ordenes_list_base(): string {
 function ordenes_aliases(): array {
     return [
       'Title'=>['Title','Titulo'],'Folio'=>['Folio'],'Fecha'=>['Fecha'],'EmpresaCompradora'=>['EmpresaCompradora','Empresa Compradora'],
-      'Proveedor'=>['Proveedor'],'RFC'=>['RFC'],'Telefono'=>['Telefono','Teléfono'],'CiudadEstado'=>['CiudadEstado','Ciudad Estado'],
+      'Proveedor'=>['Proveedor'],'Domicilio'=>['Domicilio'],'RFC'=>['RFC'],'Telefono'=>['Telefono','Teléfono'],'CiudadEstado'=>['CiudadEstado','Ciudad Estado'],
       'CondicionPago'=>['CondicionPago','Condicion de Pago'],'TiempoEntrega'=>['TiempoEntrega','Tiempo de Entrega'],'Moneda'=>['Moneda'],
       'TipoCambio'=>['TipoCambio','Tipo de Cambio'],'PartidasJson'=>['PartidasJson','Partidas'],'Subtotal'=>['Subtotal'],'IvaPct'=>['IvaPct'],
       'IVA'=>['IVA'],'RetIsrPct'=>['RetIsrPct'],'RetencionISR'=>['RetencionISR','Retencion ISR'],'RetIvaPct'=>['RetIvaPct'],
@@ -117,7 +117,7 @@ function ordenes_aliases(): array {
 }
 
 function ordenes_schema(): array {
-    $text=['Folio','EmpresaCompradora','Proveedor','RFC','Telefono','CiudadEstado','CondicionPago','TiempoEntrega','Moneda','Banco','Cuenta','CLABE','SolicitanteNombre','SolicitanteCorreo','Estado','Ambiente'];
+    $text=['Folio','EmpresaCompradora','Proveedor','Domicilio','RFC','Telefono','CiudadEstado','CondicionPago','TiempoEntrega','Moneda','Banco','Cuenta','CLABE','SolicitanteNombre','SolicitanteCorreo','Estado','Ambiente'];
     $num=['TipoCambio','Subtotal','IvaPct','IVA','RetIsrPct','RetencionISR','RetIvaPct','RetencionIVA','Total'];
     $out=['Fecha'=>'DateTime','PartidasJson'=>'Note']; foreach($text as $x)$out[$x]='Text'; foreach($num as $x)$out[$x]='Number'; return $out;
 }
@@ -269,6 +269,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
         'Fecha' => $fecha,
         'EmpresaCompradora' => trim((string)($input['empresaCompradora'] ?? 'MEGUESA')),
         'Proveedor' => $proveedor,
+        'Domicilio' => trim((string)($input['domicilio'] ?? '')),
         'RFC' => $rfc,
         'Telefono' => trim((string)($input['telefono'] ?? '')),
         'CiudadEstado' => trim((string)($input['ciudadEstado'] ?? '')),
