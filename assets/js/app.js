@@ -273,7 +273,24 @@
     $('odcForm').submit();
   }
 
+  function validateAttachments() {
+    const input = $('attachments');
+    if (!input) return true;
+    const files = Array.from(input.files || []);
+    const total = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+    const errors = [];
+    if (files.length > 5) errors.push('Solo se permiten hasta 5 archivos.');
+    if (total > 2621440) errors.push('El tamaño combinado no puede superar 2.5 MB.');
+    input.setCustomValidity(errors.join(' '));
+    return errors.length === 0;
+  }
+
   function sendTestEmail() {
+    if (!validateAttachments()) {
+      $('attachments').reportValidity();
+      $('btnTestEmail').dataset.sending = '0';
+      return;
+    }
     if (!syncDateFromDisplay()) {
       $('fechaDisplay').reportValidity();
       $('btnTestEmail').dataset.sending = '0';
