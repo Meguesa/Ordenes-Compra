@@ -40,6 +40,27 @@ if (!$prototypeMode && isset($_GET['action'])) {
             exit;
         }
 
+        if ($action === 'preparar') {
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+                throw new RuntimeException('Metodo no permitido.');
+            }
+            $expected = (string)($_SESSION['ordenes_csrf'] ?? '');
+            $received = trim((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+            if ($expected === '' || $received === '' || !hash_equals($expected, $received)) {
+                throw new RuntimeException('La sesion de seguridad no es valida. Recarga la pagina.');
+            }
+
+            $result = ordenes_try_prepare_schema();
+            echo json_encode([
+                'ok' => count($result['missing']) === 0,
+                'list' => ORDENES_LIST_TITLE,
+                'created' => $result['created'],
+                'errors' => $result['errors'],
+                'missing' => $result['missing'],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
         if ($action === 'guardar') {
             if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
                 throw new RuntimeException('Metodo no permitido.');
