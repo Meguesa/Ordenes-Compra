@@ -175,7 +175,7 @@
       return;
     }
     try {
-      const result = await apiRequest('api/diagnostico-sharepoint.php');
+      const result = await apiRequest('index.php?action=diagnostico');
       if (result.ready) {
         $('sharepointStatus').className = 'sharepoint-status ok';
         $('sharepointStatus').textContent = 'SharePoint listo · BI_Ordenes_Compra conectada.';
@@ -195,7 +195,7 @@
     button.textContent = 'Preparando…';
     $('sharepointStatus').textContent = 'Creando columnas faltantes en BI_Ordenes_Compra…';
     try {
-      const result = await apiRequest('api/preparar-sharepoint.php', {
+      const result = await apiRequest('index.php?action=preparar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
@@ -228,7 +228,7 @@
     button.textContent = 'Guardando…';
     $('formStatus').textContent = 'Guardando borrador en SharePoint…';
     try {
-      const result = await apiRequest('api/guardar-borrador.php', {
+      const result = await apiRequest('index.php?action=guardar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
