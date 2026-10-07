@@ -35,12 +35,12 @@ function ordenes_config(): array {
     $raw = require '/home/juanpab1/portal-config/config.php';
     if (!is_array($raw)) throw new RuntimeException('Configuracion privada no disponible.');
     $cfg = [
-        'tenantId'=>trim((string)($raw['portal_access_tenant_id'] ?? $raw['solicitud_backend_tenant_id'] ?? '')),
-        'clientId'=>trim((string)($raw['portal_access_client_id'] ?? $raw['solicitud_backend_client_id'] ?? '')),
-        'clientSecret'=>trim((string)($raw['portal_access_client_secret'] ?? $raw['solicitud_backend_client_secret'] ?? '')),
-        'siteId'=>trim((string)($raw['portal_access_sharepoint_site_id'] ?? $raw['solicitud_sharepoint_site_id'] ?? '')),
-        'pfxPath'=>trim((string)($raw['portal_access_sharepoint_pfx_path'] ?? $raw['solicitud_sharepoint_pfx_path'] ?? '')),
-        'pfxPassword'=>(string)($raw['portal_access_sharepoint_pfx_password'] ?? $raw['solicitud_sharepoint_pfx_password'] ?? ''),
+        'tenantId'=>trim((string)($raw['reportes_tenant_id'] ?? $raw['portal_access_tenant_id'] ?? $raw['solicitud_backend_tenant_id'] ?? '')),
+        'clientId'=>trim((string)($raw['reportes_client_id'] ?? $raw['portal_access_client_id'] ?? $raw['solicitud_backend_client_id'] ?? '')),
+        'clientSecret'=>trim((string)($raw['reportes_client_secret'] ?? $raw['portal_access_client_secret'] ?? $raw['solicitud_backend_client_secret'] ?? '')),
+        'siteId'=>trim((string)($raw['reportes_sharepoint_site_id'] ?? $raw['portal_access_sharepoint_site_id'] ?? $raw['solicitud_sharepoint_site_id'] ?? '')),
+        'pfxPath'=>trim((string)($raw['reportes_sharepoint_pfx_path'] ?? $raw['portal_access_sharepoint_pfx_path'] ?? $raw['solicitud_sharepoint_pfx_path'] ?? '')),
+        'pfxPassword'=>(string)($raw['reportes_sharepoint_pfx_password'] ?? $raw['portal_access_sharepoint_pfx_password'] ?? $raw['solicitud_sharepoint_pfx_password'] ?? ''),
     ];
     foreach (['tenantId','clientId','clientSecret','siteId','pfxPath'] as $k) if ($cfg[$k]==='') throw new RuntimeException('Falta configurar '.$k.'.');
     if (!is_file($cfg['pfxPath'])) throw new RuntimeException('Certificado PFX no disponible.');
