@@ -480,6 +480,13 @@
   bindTaxToggle('aplicaIva', 'ivaPct');
   bindTaxToggle('aplicaRetIsr', 'retIsrPct');
   bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
   $('moneda').addEventListener('change', recalculate);
   if ($('fechaPickerButton') && $('fecha')) {
     $('fechaPickerButton').addEventListener('click', () => {
