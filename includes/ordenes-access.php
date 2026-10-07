@@ -17,7 +17,7 @@ function ordenes_user_has_preview_access(?array $user = null): bool
 {
     $user = $user ?? portal_user();
     $email = strtolower(trim((string)($user['email'] ?? '')));
-    return $email !== '' && in_array($email, ordenes_preview_allowed_emails(), true);
+    return $email !== '';
 }
 
 function ordenes_require_preview_access(): void
@@ -26,7 +26,7 @@ function ordenes_require_preview_access(): void
 
     http_response_code(403);
     header('Content-Type: text/html; charset=UTF-8');
-    echo '<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acceso restringido</title></head><body style="font-family:Segoe UI,Arial,sans-serif;background:#f7f5f0;color:#241d19;margin:0;padding:40px"><main style="max-width:720px;margin:60px auto;background:#fff;border:1px solid #e8e1d8;border-top:5px solid #fdbb2d;border-radius:14px;padding:28px"><h1 style="color:#3a1109">Órdenes de Compra</h1><p>Esta herramienta continúa en desarrollo y tu cuenta todavía no tiene acceso.</p><p><a href="/" style="color:#225b8a;font-weight:700">Regresar al Portal Interno</a></p></main></body></html>';
+    echo '<!doctype html><html lang="es-MX"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acceso no disponible</title></head><body style="font-family:Segoe UI,Arial,sans-serif;background:#f7f5f0;color:#241d19;margin:0;padding:40px"><main style="max-width:720px;margin:60px auto;background:#fff;border:1px solid #e8e1d8;border-top:5px solid #fdbb2d;border-radius:14px;padding:28px"><h1 style="color:#3a1109">Órdenes de Compra</h1><p>No fue posible validar tu correo de sesión.</p><p><a href="/" style="color:#225b8a;font-weight:700">Regresar al Portal Interno</a></p></main></body></html>';
     exit;
 }
 
@@ -318,7 +318,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
         'SolicitanteNombre' => $userName,
         'SolicitanteCorreo' => $userEmail,
         'Estado' => 'BORRADOR',
-        'Ambiente' => 'PREVIEW',
+        'Ambiente' => 'PRODUCCION',
     ];
 
     if ($itemId > 0) {
@@ -517,17 +517,18 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
     $itemId=(int)($input['itemId']??0);
 
     if($itemId<=0 || !preg_match('/^\d{4,}$/',$folio)) {
-        throw new RuntimeException('Guarda primero la ODC como borrador antes de enviar el correo de prueba.');
+        throw new RuntimeException('Guarda primero la ODC como borrador antes de enviar el correo.');
     }
 
     if(!ordenes_user_has_preview_access($user)) {
-        throw new RuntimeException('Tu cuenta no puede enviar correos de prueba.');
+        throw new RuntimeException('Tu cuenta no puede enviar correos.');
     }
 
     $toAddresses=[
         'finanzas@juanpablo.com.mx',
         'admin.gerencia@juanpablo.com.mx',
         'jose.santana@juanpablo.com.mx',
+        'gabriel.guerra@juanpablo.com.mx',
     ];
     $requesterEmail=strtolower(trim((string)($user['email']??'')));
     $ccAddresses=[];
@@ -549,9 +550,9 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
       .'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 10px;background:#f5f1ec"><tr><td align="center">'
       .'<table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#fff;border:1px solid #e4d9cf;border-radius:12px;overflow:hidden">'
       .'<tr><td style="padding:22px 26px;border-top:5px solid #e28a16">'
-      .'<div style="font-size:11px;letter-spacing:1.4px;font-weight:700;color:#225b8a">JARDINES DE JUAN PABLO · PRUEBA</div>'
+      .'<div style="font-size:11px;letter-spacing:1.4px;font-weight:700;color:#225b8a">JARDINES DE JUAN PABLO</div>'
       .'<h1 style="font-size:22px;margin:8px 0 4px">Orden de Compra '.$h($folio).'</h1>'
-      .'<p style="margin:0;color:#6b625d">Correo de prueba del nuevo flujo de Órdenes de Compra.</p>'
+      .'<p style="margin:0;color:#6b625d">Orden de Compra generada desde el Portal Interno de Jardines de Juan Pablo.</p>'
       .'</td></tr><tr><td style="padding:0 26px 24px">'
       .'<table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse;font-size:14px">'
       .'<tr><td style="font-weight:700;border-bottom:1px solid #eee7e1">Proveedor</td><td style="border-bottom:1px solid #eee7e1">'.$h($proveedor).'</td></tr>'
@@ -560,7 +561,7 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
       .'</table>'
       .'<div style="margin-top:20px;padding:14px 16px;background:#fff8e6;border:1px solid #efd48a;border-radius:8px">'
       .'<strong>Observaciones</strong><div style="margin-top:8px;line-height:1.5">'.$obsHtml.'</div></div>'
-      .'<p style="margin:20px 0 0;color:#756a64;font-size:12px">Destinatarios de prueba: '.$h($recipient).($ccAddresses?'. Copia al solicitante: '.$h(implode(', ',$ccAddresses)):'').'.</p>'
+      .'<p style="margin:20px 0 0;color:#756a64;font-size:12px">Destinatarios: '.$h($recipient).($ccAddresses?'. Copia al solicitante: '.$h(implode(', ',$ccAddresses)):'').'.</p>'
       .'</td></tr></table></td></tr></table></body></html>';
 
     $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
@@ -571,7 +572,7 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
 
     $request=[
         'message'=>[
-            'subject'=>'[PRUEBA] Orden de Compra '.$folio.' | '.$proveedor,
+            'subject'=>'Orden de Compra '.$folio.' | '.$proveedor,
             'body'=>['contentType'=>'HTML','content'=>$html],
             'toRecipients'=>array_map(static fn(string $address):array=>['emailAddress'=>['address'=>$address]],$toAddresses),
             'ccRecipients'=>array_map(static fn(string $address):array=>['emailAddress'=>['address'=>$address]],$ccAddresses),
@@ -590,6 +591,10 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
 
     $token=ordenes_mail_graph_token();
     ordenes_graph_send_mail_with_retry($sender,$token,$json);
+    ordenes_update_item($itemId, [
+        'Estado' => 'ENVIADA',
+        'Ambiente' => 'PRODUCCION',
+    ]);
 
     return [
         'ok'=>true,
