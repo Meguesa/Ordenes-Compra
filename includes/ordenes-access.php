@@ -405,7 +405,112 @@ function ordenes_mail_graph_token(): string
     return $token;
 }
 
-function ordenes_send_test_email(array $input,array $user): array
+function ordenes_prepare_uploaded_attachments(array $files): array
+{
+    if (!$files || !isset($files['name'])) return [];
+
+    $names = is_array($files['name']) ? $files['name'] : [$files['name']];
+    $types = is_array($files['type'] ?? null) ? $files['type'] : [($files['type'] ?? '')];
+    $tmpNames = is_array($files['tmp_name'] ?? null) ? $files['tmp_name'] : [($files['tmp_name'] ?? '')];
+    $errors = is_array($files['error'] ?? null) ? $files['error'] : [($files['error'] ?? UPLOAD_ERR_NO_FILE)];
+    $sizes = is_array($files['size'] ?? null) ? $files['size'] : [($files['size'] ?? 0)];
+
+    $allowedExt = ['pdf','jpg','jpeg','png','webp','doc','docx','xls','xlsx','ppt','pptx','txt','csv','zip'];
+    $result = [];
+    $total = 0;
+
+    foreach ($names as $i => $rawName) {
+        $error = (int)($errors[$i] ?? UPLOAD_ERR_NO_FILE);
+        if ($error === UPLOAD_ERR_NO_FILE) continue;
+        if ($error !== UPLOAD_ERR_OK) throw new RuntimeException('No fue posible cargar uno de los archivos adjuntos.');
+
+        if (count($result) >= 5) throw new RuntimeException('Solo se permiten hasta 5 archivos adjuntos.');
+
+        $name = basename(trim((string)$rawName));
+        $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+        if ($name === '' || !in_array($ext, $allowedExt, true)) {
+            throw new RuntimeException('Tipo de archivo no permitido: '.($name !== '' ? $name : 'archivo sin nombre').'.');
+        }
+
+        $size = (int)($sizes[$i] ?? 0);
+        if ($size <= 0) throw new RuntimeException('El archivo '.$name.' esta vacio.');
+        $total += $size;
+        if ($total > 2621440) throw new RuntimeException('Los adjuntos superan el limite combinado de 2.5 MB.');
+
+        $tmp = (string)($tmpNames[$i] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) throw new RuntimeException('No fue posible validar el archivo '.$name.'.');
+
+        $bytes = file_get_contents($tmp);
+        if ($bytes === false) throw new RuntimeException('No fue posible leer el archivo '.$name.'.');
+
+        $mime = trim((string)($types[$i] ?? ''));
+        if ($mime === '' || $mime === 'application/octet-stream') {
+            $finfo = function_exists('finfo_open') ? finfo_open(FILEINFO_MIME_TYPE) : false;
+            if ($finfo) {
+                $detected = finfo_file($finfo, $tmp);
+                finfo_close($finfo);
+                if (is_string($detected) && $detected !== '') $mime = $detected;
+            }
+        }
+        if ($mime === '') $mime = 'application/octet-stream';
+
+        $result[] = [
+            '@odata.type' => '#microsoft.graph.fileAttachment',
+            'name' => $name,
+            'contentType' => $mime,
+            'contentBytes' => base64_encode($bytes),
+        ];
+    }
+
+    return $result;
+}
+
+function ordenes_graph_send_mail_with_retry(string $sender,string $token,string $json): void
+{
+    $url='https://graph.microsoft.com/v1.0/users/'.rawurlencode($sender).'/sendMail';
+    $lastStatus=0;
+    $lastDetail='';
+
+    for ($attempt=1; $attempt<=3; $attempt++) {
+        $curl=curl_init($url);
+        if($curl===false) throw new RuntimeException('No fue posible iniciar el envio del correo.');
+
+        curl_setopt_array($curl,[
+            CURLOPT_RETURNTRANSFER=>true,
+            CURLOPT_FOLLOWLOCATION=>false,
+            CURLOPT_CONNECTTIMEOUT=>10,
+            CURLOPT_TIMEOUT=>60,
+            CURLOPT_POST=>true,
+            CURLOPT_POSTFIELDS=>$json,
+            CURLOPT_HTTPHEADER=>[
+                'Authorization: Bearer '.$token,
+                'Content-Type: application/json',
+                'Accept: application/json',
+            ],
+            CURLOPT_SSL_VERIFYPEER=>true,
+            CURLOPT_SSL_VERIFYHOST=>2,
+        ]);
+
+        $response=curl_exec($curl);
+        $status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
+        $error=curl_error($curl);
+        curl_close($curl);
+
+        if($response!==false && in_array($status,[200,202,204],true)) return;
+
+        $lastStatus=$status;
+        $decoded=is_string($response)?json_decode($response,true):null;
+        $lastDetail=is_array($decoded)?trim((string)($decoded['error']['message']??'')):'';
+        if($response===false && $error!=='') $lastDetail=$error;
+
+        if(!in_array($status,[429,502,503,504],true) || $attempt===3) break;
+        usleep($attempt * 700000);
+    }
+
+    throw new RuntimeException('Microsoft Graph respondio HTTP '.$lastStatus.($lastDetail!==''?': '.$lastDetail:'.'));
+}
+
+function ordenes_send_test_email(array $input,array $user,array $files=[]): array
 {
     $folio=trim((string)($input['folio']??''));
     $itemId=(int)($input['itemId']??0);
@@ -458,12 +563,12 @@ function ordenes_send_test_email(array $input,array $user): array
             'subject'=>'[PRUEBA] Orden de Compra '.$folio.' | '.$proveedor,
             'body'=>['contentType'=>'HTML','content'=>$html],
             'toRecipients'=>[['emailAddress'=>['address'=>$recipient]]],
-            'attachments'=>[[
+            'attachments'=>array_merge([[
                 '@odata.type'=>'#microsoft.graph.fileAttachment',
                 'name'=>$attachmentName,
                 'contentType'=>'application/pdf',
                 'contentBytes'=>base64_encode($pdf),
-            ]],
+            ]], ordenes_prepare_uploaded_attachments($files)),
         ],
         'saveToSentItems'=>true,
     ];
@@ -472,36 +577,7 @@ function ordenes_send_test_email(array $input,array $user): array
     if(!is_string($json)) throw new RuntimeException('No fue posible preparar el correo.');
 
     $token=ordenes_mail_graph_token();
-    $curl=curl_init('https://graph.microsoft.com/v1.0/users/'.rawurlencode($sender).'/sendMail');
-    if($curl===false) throw new RuntimeException('No fue posible iniciar el envio del correo.');
-
-    curl_setopt_array($curl,[
-        CURLOPT_RETURNTRANSFER=>true,
-        CURLOPT_FOLLOWLOCATION=>false,
-        CURLOPT_CONNECTTIMEOUT=>10,
-        CURLOPT_TIMEOUT=>40,
-        CURLOPT_POST=>true,
-        CURLOPT_POSTFIELDS=>$json,
-        CURLOPT_HTTPHEADER=>[
-            'Authorization: Bearer '.$token,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ],
-        CURLOPT_SSL_VERIFYPEER=>true,
-        CURLOPT_SSL_VERIFYHOST=>2,
-    ]);
-
-    $response=curl_exec($curl);
-    $status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
-    $error=curl_error($curl);
-    curl_close($curl);
-
-    if($response===false) throw new RuntimeException('El envio de correo fallo: '.$error);
-    if(!in_array($status,[200,202,204],true)) {
-        $decoded=json_decode((string)$response,true);
-        $detail=is_array($decoded)?trim((string)($decoded['error']['message']??'')):'';
-        throw new RuntimeException('Microsoft Graph respondio HTTP '.$status.($detail!==''?': '.$detail:'.'));
-    }
+    ordenes_graph_send_mail_with_retry($sender,$token,$json);
 
     return [
         'ok'=>true,
