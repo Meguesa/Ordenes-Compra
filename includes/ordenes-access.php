@@ -145,7 +145,18 @@ function ordenes_field(string $canonical): ?string {
     $cand=ordenes_aliases()[$canonical]??[$canonical];
     foreach(ordenes_fields() as $f){
         if(!empty($f['ReadOnlyField'])||!empty($f['Hidden']))continue;
-        foreach($cand as $c) if(strcasecmp((string)$f['InternalName'],$c)===0 || ordenes_norm((string)$f['Title'])===ordenes_norm($c)) return (string)$f['InternalName'];
+        foreach($cand as $candidate){
+            if(strcasecmp((string)$f['InternalName'],$candidate)===0) return (string)$f['InternalName'];
+        }
+    }
+    foreach(ordenes_fields() as $f){
+        if(!empty($f['ReadOnlyField'])||!empty($f['Hidden']))continue;
+        $titleNorm=ordenes_norm((string)$f['Title']);
+        $internalNorm=ordenes_norm((string)$f['InternalName']);
+        foreach($cand as $candidate){
+            $needle=ordenes_norm((string)$candidate);
+            if($needle!=='' && ($needle===$titleNorm || $needle===$internalNorm)) return (string)$f['InternalName'];
+        }
     }
     return null;
 }
