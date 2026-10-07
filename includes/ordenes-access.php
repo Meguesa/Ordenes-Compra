@@ -604,3 +604,110 @@ function ordenes_send_test_email(array $input,array $user,array $files=[]): arra
         'attachment'=>$attachmentName,
     ];
 }
+
+
+function ordenes_list_user_records(array $user,string $estado): array
+{
+    $email=strtolower(trim((string)($user['email']??'')));
+    if($email==='') throw new RuntimeException('La sesion no contiene correo electronico.');
+
+    $estado=strtoupper(trim($estado));
+    if(!in_array($estado,['BORRADOR','ENVIADA'],true)) throw new InvalidArgumentException('Estado de ODC no valido.');
+
+    $emailField=ordenes_field('SolicitanteCorreo');
+    $estadoField=ordenes_field('Estado');
+    if($emailField===null || $estadoField===null) throw new RuntimeException('No fue posible resolver los campos de consulta de Ordenes de Compra.');
+
+    $canonical=['Folio','Fecha','Proveedor','Total','Estado','SolicitanteCorreo'];
+    $resolved=['Id'];
+    $fieldMap=[];
+    foreach($canonical as $name){
+        $field=ordenes_field($name);
+        if($field!==null){
+            $resolved[]=$field;
+            $fieldMap[$name]=$field;
+        }
+    }
+
+    $filter=$emailField." eq '".str_replace("'","''",$email)."' and ".$estadoField." eq '".$estado."'";
+    $query=http_build_query([
+        '$select'=>implode(',',array_values(array_unique($resolved))),
+        '$filter'=>$filter,
+        '$orderby'=>'Id desc',
+        '$top'=>'100',
+    ],'','&',PHP_QUERY_RFC3986);
+
+    $s=ordenes_session();
+    $data=ordenes_http_json(ordenes_list_base().'/items?'.$query,'GET',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+    ]);
+
+    $out=[];
+    foreach(($data['value']??[]) as $row){
+        if(!is_array($row)) continue;
+        $record=['id'=>(int)($row['Id']??0)];
+        foreach($fieldMap as $canonicalName=>$internalName){
+            $record[$canonicalName]=$row[$internalName]??null;
+        }
+        $out[]=$record;
+    }
+    return $out;
+}
+
+function ordenes_load_user_draft(int $itemId,array $user): array
+{
+    if($itemId<=0) throw new InvalidArgumentException('Borrador invalido.');
+    $email=strtolower(trim((string)($user['email']??'')));
+    if($email==='') throw new RuntimeException('La sesion no contiene correo electronico.');
+
+    $item=ordenes_get_item($itemId);
+    $ownerField=ordenes_field('SolicitanteCorreo');
+    $stateField=ordenes_field('Estado');
+    $owner=$ownerField!==null?strtolower(trim((string)($item[$ownerField]??''))):'';
+    $state=$stateField!==null?strtoupper(trim((string)($item[$stateField]??''))):'';
+
+    if($owner!==$email) throw new RuntimeException('No tienes permiso para abrir este borrador.');
+    if($state!=='BORRADOR') throw new RuntimeException('La orden seleccionada ya no es un borrador.');
+
+    $get=static function(string $name) use ($item): mixed {
+        $field=ordenes_field($name);
+        return $field!==null?($item[$field]??null):null;
+    };
+
+    $items=[];
+    $raw=(string)($get('PartidasJson')??'');
+    if($raw!==''){
+        $decoded=json_decode($raw,true);
+        if(is_array($decoded)) $items=$decoded;
+    }
+
+    return [
+        'itemId'=>$itemId,
+        'folio'=>(string)($get('Folio')??''),
+        'fecha'=>substr((string)($get('Fecha')??''),0,10),
+        'empresaCompradora'=>(string)($get('EmpresaCompradora')??'MEGUESA'),
+        'proveedor'=>(string)($get('Proveedor')??''),
+        'domicilio'=>(string)($get('Domicilio')??''),
+        'rfc'=>(string)($get('RFC')??''),
+        'telefono'=>(string)($get('Telefono')??''),
+        'ciudadEstado'=>(string)($get('CiudadEstado')??''),
+        'condicionPago'=>(string)($get('CondicionPago')??''),
+        'tiempoEntrega'=>(string)($get('TiempoEntrega')??''),
+        'moneda'=>(string)($get('Moneda')??'MXN'),
+        'tipoCambio'=>(float)($get('TipoCambio')??1),
+        'items'=>$items,
+        'subtotal'=>(float)($get('Subtotal')??0),
+        'ivaPct'=>(float)($get('IvaPct')??0),
+        'iva'=>(float)($get('IVA')??0),
+        'retIsrPct'=>(float)($get('RetIsrPct')??0),
+        'retIsr'=>(float)($get('RetencionISR')??0),
+        'retIvaPct'=>(float)($get('RetIvaPct')??0),
+        'retIva'=>(float)($get('RetencionIVA')??0),
+        'total'=>(float)($get('Total')??0),
+        'banco'=>(string)($get('Banco')??''),
+        'cuenta'=>(string)($get('Cuenta')??''),
+        'clabe'=>(string)($get('CLABE')??''),
+        'observaciones'=>'',
+    ];
+}
