@@ -300,7 +300,7 @@
     persistLocal(data);
 
     if (context.prototype) {
-      $('formStatus').textContent = 'El correo de prueba solo puede enviarse desde el Portal publicado.';
+      $('formStatus').textContent = 'El correo solo puede enviarse desde el Portal publicado.';
       return;
     }
 
@@ -312,11 +312,11 @@
     data.itemId = Number(context.itemId);
     data.folio = String(context.folio);
 
-    $('formStatus').textContent = 'Enviando correo de prueba a gabriel.guerra@juanpablo.com.mx…';
+    $('formStatus').textContent = 'Enviando correo a gabriel.guerra@juanpablo.com.mx…';
     $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
 
     const actionInput = $('odcForm').querySelector('input[name="form_action"]');
-    actionInput.value = 'send_test_email';
+    actionInput.value = 'send_email';
 
     const button = $('btnTestEmail');
     button.disabled = true;
@@ -535,9 +535,9 @@
     if (context.mailFolio) context.folio = context.mailFolio;
     if (context.mailItemId) context.itemId = Number(context.mailItemId);
     if (context.folio) $('folioDisplay').textContent = context.folio;
-    $('formStatus').textContent = 'Correo de prueba enviado correctamente a ' + context.mailRecipient + '.';
+    $('formStatus').textContent = 'Orden de Compra enviada correctamente a ' + context.mailRecipient + '.';
   } else if (context.mailError) {
-    $('formStatus').textContent = 'No se pudo enviar el correo de prueba: ' + context.mailError;
+    $('formStatus').textContent = 'No se pudo enviar el correo: ' + context.mailError;
   }
 
   checkSharepoint();
