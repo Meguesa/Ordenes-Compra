@@ -110,7 +110,37 @@
     pct.addEventListener('input', recalculate);
   }
 
+  function displayDateToIso(value) {
+    const match = String(value || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) return '';
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return '';
+    return `${match[3]}-${match[2]}-${match[1]}`;
+  }
+
+  function isoToDisplayDate(value) {
+    const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+  }
+
+  function syncDateFromDisplay() {
+    const display = $('fechaDisplay');
+    if (!display) return true;
+    const iso = displayDateToIso(display.value);
+    if (!iso) {
+      display.setCustomValidity('Usa el formato dd/mm/aaaa.');
+      return false;
+    }
+    display.setCustomValidity('');
+    $('fecha').value = iso;
+    return true;
+  }
+
   function currentData() {
+    syncDateFromDisplay();
     const totals = recalculate();
     return {
       itemId: Number(context.itemId || 0),
@@ -270,10 +300,14 @@
 
   function populateDraft(data) {
     if (!data || typeof data !== 'object') return;
-    const ids = ['fecha','proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe','observaciones'];
+    const ids = ['proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe','observaciones'];
     ids.forEach((id) => {
       if (data[id] !== undefined && $(id)) $(id).value = data[id];
     });
+    if (data.fecha && $('fecha')) {
+      $('fecha').value = data.fecha;
+      if ($('fechaDisplay')) $('fechaDisplay').value = isoToDisplayDate(data.fecha);
+    }
     if (!context.itemId) context.itemId = Number(data.itemId || 0);
     if (!context.folio) context.folio = String(data.folio || '');
     if (context.folio) $('folioDisplay').textContent = context.folio;
@@ -322,7 +356,6 @@
         <div class="odc-top-grid">
           <div class="odc-brandmark">
             <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
-            <div class="odc-anniversary"><strong>20</strong><span>AÑOS</span></div>
           </div>
 
           <div class="odc-title-block">
@@ -408,7 +441,12 @@
   $('btnAddItem').addEventListener('click', () => addItem());
   $('btnDraft').addEventListener('click', saveDraft);
   $('btnPreview').addEventListener('click', preview);
-  $('btnTestEmail').addEventListener('click', sendTestEmail);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
   $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
   document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
@@ -417,6 +455,16 @@
   bindTaxToggle('aplicaRetIsr', 'retIsrPct');
   bindTaxToggle('aplicaRetIva', 'retIvaPct');
   $('moneda').addEventListener('change', recalculate);
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
 
   let restored = null;
   try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
