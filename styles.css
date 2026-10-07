@@ -67,3 +67,177 @@ button{cursor:pointer}
 .preview-logo-title{display:flex;align-items:center;justify-content:center;gap:14px}
 .preview-logo{width:58px;height:58px;object-fit:contain;flex:0 0 58px}
 @media(max-width:720px){.preview-logo{width:46px;height:46px;flex-basis:46px}.preview-logo-title{gap:10px}}
+
+
+/* ODC_OFFICIAL_PREVIEW_V2 */
+.pdf-preview{
+  width:min(8.5in,calc(100% - 28px));
+  min-height:11in;
+  margin:22px auto;
+  padding:.42in .48in .46in;
+  background:#fff;
+  color:#000;
+  border:1px solid #cfcfcf;
+  box-shadow:0 6px 22px rgba(0,0,0,.10);
+  font-family:"Times New Roman",Times,serif;
+}
+.odc-sheet{width:100%;font-size:12px}
+.odc-top-grid{
+  display:grid;
+  grid-template-columns:120px 1fr 165px;
+  gap:12px;
+  align-items:start;
+}
+.odc-brandmark{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-height:86px;
+}
+.odc-brandmark img{width:72px;height:72px;object-fit:contain}
+.odc-anniversary{display:flex;flex-direction:column;align-items:center;line-height:.9;color:#b79a46}
+.odc-anniversary strong{font-size:30px;font-weight:700}
+.odc-anniversary span{margin-top:4px;font-family:Arial,sans-serif;font-size:8px;letter-spacing:.12em}
+.odc-title-block{text-align:center;padding-top:0}
+.odc-main-title{font-size:22px;line-height:1.15;margin-bottom:16px}
+.odc-company-name{font-size:20px;font-weight:700;line-height:1.15}
+.odc-company-line{font-size:12px;font-weight:700;line-height:1.25}
+.odc-number-date{display:grid;gap:10px}
+.odc-box{
+  min-height:32px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid #000;
+  background:#ded9c7;
+  font-weight:700;
+}
+.odc-number{font-size:20px;min-height:38px}
+.odc-date-label{font-size:11px}
+.odc-date-value{font-size:11px}
+
+.odc-provider-table,
+.odc-items-table,
+.odc-totals-table,
+.odc-bank-table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+.odc-provider-table{margin-top:14px;font-size:10px}
+.odc-provider-table th,
+.odc-provider-table td{
+  border:1px solid #000;
+  padding:4px 6px;
+  height:25px;
+  vertical-align:middle;
+}
+.odc-provider-table th{text-align:left;font-weight:700}
+.odc-provider-table .odc-label-col{width:18%}
+.odc-provider-table .odc-value-col{width:45%}
+.odc-provider-table .odc-right-label-col{width:17%}
+.odc-provider-table .odc-right-value-col{width:20%}
+
+.odc-items-table{margin-top:20px;font-family:Arial,sans-serif;font-size:11px}
+.odc-items-table th,
+.odc-items-table td{border:1px solid #000}
+.odc-items-table th{
+  background:#ded9c7;
+  font-family:"Times New Roman",Times,serif;
+  font-size:10px;
+  font-weight:700;
+  text-align:center;
+  vertical-align:middle;
+  height:34px;
+  padding:3px 5px;
+}
+.odc-items-table td{height:29px;padding:4px 7px;vertical-align:top}
+.odc-items-table .qty{width:17%}
+.odc-items-table .desc{width:51%}
+.odc-items-table .unit{width:14%}
+.odc-items-table .amount{width:18%}
+.odc-qty{text-align:center;vertical-align:middle!important}
+.odc-desc{text-align:left}
+.odc-money{text-align:right;white-space:nowrap}
+
+.odc-bottom-grid{
+  margin-top:0;
+  display:grid;
+  grid-template-columns:58% 42%;
+  align-items:start;
+}
+.odc-confirmation{padding-right:12px}
+.odc-confirm-banner{
+  min-height:33px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#ded9c7;
+  border-left:1px solid #000;
+  border-right:1px solid #000;
+  border-bottom:1px solid #000;
+  font-size:15px;
+  font-weight:700;
+}
+.odc-confirm-title{
+  margin-top:18px;
+  margin-bottom:14px;
+  font-size:11px;
+}
+.odc-line-field{
+  min-height:28px;
+  display:grid;
+  grid-template-columns:70px 1fr;
+  align-items:end;
+  font-family:Arial,sans-serif;
+  font-size:10px;
+}
+.odc-line-field span{font-weight:400}
+.odc-line-field strong{
+  min-height:21px;
+  border-bottom:1px solid #000;
+  font-family:"Times New Roman",Times,serif;
+  font-size:13px;
+}
+.odc-signature{margin-top:8px}
+
+.odc-financials{border-left:0}
+.odc-totals-table th,
+.odc-totals-table td{
+  border-bottom:1px solid #000;
+  height:31px;
+  padding:4px 7px;
+}
+.odc-totals-table th{
+  width:58%;
+  text-align:right;
+  background:#fff;
+  font-size:11px;
+}
+.odc-totals-table td{
+  width:42%;
+  text-align:right;
+  font-size:12px;
+  font-weight:700;
+}
+.odc-total-row th,
+.odc-total-row td{
+  background:#ded9c7;
+  font-size:12px;
+  font-weight:700;
+  border-top:1px solid #000;
+}
+.odc-bank-table{margin-top:10px;font-family:Arial,sans-serif;font-size:10px}
+.odc-bank-table th,
+.odc-bank-table td{padding:4px 6px;border:0}
+.odc-bank-table th{width:38%;text-align:left;font-weight:400}
+.odc-bank-table td{border-bottom:1px solid #000}
+
+@media(max-width:860px){
+  .pdf-preview{width:calc(100% - 18px);padding:26px 24px;min-height:auto}
+  .odc-top-grid{grid-template-columns:95px 1fr 125px;gap:8px}
+  .odc-brandmark img{width:58px;height:58px}
+  .odc-main-title{font-size:18px}
+  .odc-company-name{font-size:16px}
+  .odc-number{font-size:15px}
+}
