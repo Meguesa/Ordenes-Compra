@@ -54,7 +54,7 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
     }
 }
 
-if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['form_action'] ?? '') === 'send_test_email') {
+if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['form_action'] ?? '') === 'send_email') {
     try {
         $expected = (string)($_SESSION['ordenes_csrf'] ?? '');
         $received = (string)($_POST['csrf_token'] ?? '');
@@ -91,7 +91,7 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
             $mailPayload = json_decode($decoded, true);
             if (!is_array($mailPayload)) throw new RuntimeException('Los datos recibidos no son validos.');
 
-            $mailResult = ordenes_send_test_email($mailPayload, $user, is_array($_FILES['attachments'] ?? null) ? $_FILES['attachments'] : []);
+            $mailResult = ordenes_send_email($mailPayload, $user, is_array($_FILES['attachments'] ?? null) ? $_FILES['attachments'] : []);
         }
     } catch (Throwable $error) {
         $mailError = $error->getMessage();
@@ -185,7 +185,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-9">
+  <link rel="stylesheet" href="styles.css?v=20261007-10">
 </head>
 <body>
 <header class="tool-header">
@@ -226,7 +226,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
 <main class="shell main-content">
   <section class="form-banner">
     <div>
-      <span class="status-pill">EN DESARROLLO</span>
+      
       <p class="eyebrow">Nueva orden de compra</p>
       <h1>Captura de ODC</h1>
       <p>Completa la información del proveedor y de la compra. Los importes y totales se calculan automáticamente.</p>
@@ -239,8 +239,8 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
 
   <div class="development-note">
     <div>
-      <strong>Vista previa controlada</strong>
-      <span>Los borradores se registran en BI_Ordenes_Compra. Esta versión todavía no genera folios oficiales, PDF definitivo ni correos a Finanzas.</span>
+      <strong>Órdenes de Compra</strong>
+      <span>Las órdenes se registran en BI_Ordenes_Compra y pueden enviarse a Finanzas con su PDF y adjuntos.</span>
       <span id="sharepointStatus" class="sharepoint-status">Verificando conexión con SharePoint…</span>
     </div>
     <button id="btnPrepareSharepoint" class="mini-button" type="button" hidden>Preparar lista SharePoint</button>
@@ -452,21 +452,20 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
       <label class="attachment-upload">
         <span>Documentos e imágenes</span>
         <input id="attachments" name="attachments[]" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
-        <small>Hasta 5 archivos · máximo combinado 2.5 MB durante la prueba.</small>
+        <small>Hasta 5 archivos · máximo combinado 2.5 MB.</small>
       </label>
       <div id="attachmentList" class="attachment-list">Sin archivos seleccionados.</div>
     </section>
 
     <section class="form-actions-panel">
       <div class="form-status">
-        <strong>Versión de prueba</strong>
+        <strong>Orden de Compra</strong>
         <span id="formStatus">Captura una partida para calcular el total.</span>
       </div>
       <div class="form-actions">
         <button id="btnDraft" class="secondary-button" type="button">Guardar borrador</button>
         <button id="btnPreview" class="secondary-button" type="button">Vista previa PDF</button>
-        <button id="btnTestEmail" class="primary-button" type="button">Enviar prueba a Finanzas</button>
-        <button class="primary-button" type="button" disabled title="Se habilitará al conectar el flujo productivo">Generar y enviar a Finanzas</button>
+        <button id="btnTestEmail" class="primary-button" type="button">Generar y enviar a Finanzas</button>
       </div>
     </section>
   </form>
@@ -505,6 +504,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'mailFolio' => is_array($mailPayload) ? (string)($mailPayload['folio'] ?? '') : '',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-9"></script>
+<script src="assets/js/app.js?v=20261007-10"></script>
 </body>
 </html>
