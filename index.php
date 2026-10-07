@@ -22,6 +22,29 @@ if (!$prototypeMode) {
     ];
 }
 
+$saveResult = null;
+$saveError = '';
+
+if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['form_action'] ?? '') === 'save_draft') {
+    try {
+        $expected = (string)($_SESSION['ordenes_csrf'] ?? '');
+        $received = (string)($_POST['csrf_token'] ?? '');
+        if ($expected === '' || $received === '' || !hash_equals($expected, $received)) {
+            throw new RuntimeException('La sesion del formulario expiro. Actualiza la pagina e intentalo nuevamente.');
+        }
+
+        $encoded = trim((string)($_POST['draft_payload'] ?? ''));
+        $decoded = base64_decode($encoded, true);
+        if ($decoded === false || $decoded === '') throw new RuntimeException('No fue posible leer los datos del borrador.');
+        $input = json_decode($decoded, true);
+        if (!is_array($input)) throw new RuntimeException('El borrador recibido no es valido.');
+
+        $saveResult = ordenes_save_draft_payload($input, $user);
+    } catch (Throwable $error) {
+        $saveError = $error->getMessage();
+    }
+}
+
 if (!$prototypeMode && isset($_GET['action'])) {
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store');
@@ -104,7 +127,7 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-2">
+  <link rel="stylesheet" href="styles.css?v=20261007-3">
 </head>
 <body>
 <header class="tool-header">
@@ -165,7 +188,11 @@ $today = (new DateTimeImmutable('now', new DateTimeZone('America/Monterrey')))->
     <button id="btnPrepareSharepoint" class="mini-button" type="button" hidden>Preparar lista SharePoint</button>
   </div>
 
-  <form id="odcForm" class="odc-form" novalidate>
+  <form id="odcForm" class="odc-form" method="post" action="/ordenes-compra/" novalidate>
+    <input type="hidden" name="form_action" value="save_draft">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['ordenes_csrf'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+    <input type="hidden" id="draftPayload" name="draft_payload" value="">
+
     <section class="form-section">
       <div class="section-title">
         <span>1</span>
@@ -370,10 +397,12 @@ window.ODC_CONTEXT = <?= json_encode([
     'user' => ['name' => html_entity_decode($name), 'email' => html_entity_decode($email)],
     'prototype' => $prototypeMode,
     'csrf' => $prototypeMode ? '' : (string)($_SESSION['ordenes_csrf'] ?? ''),
-    'itemId' => 0,
-    'folio' => '',
+    'itemId' => is_array($saveResult) ? (int)($saveResult['itemId'] ?? 0) : 0,
+    'folio' => is_array($saveResult) ? (string)($saveResult['folio'] ?? '') : '',
+    'saveOk' => is_array($saveResult),
+    'saveError' => $saveError,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261007-2"></script>
+<script src="assets/js/app.js?v=20261007-3"></script>
 </body>
 </html>
