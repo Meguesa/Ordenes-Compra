@@ -62,3 +62,8 @@ button{cursor:pointer}
 .mini-button:hover,.mini-button:focus-visible{border-color:var(--jp-gold);background:#fff8e6;outline:none}
 .mini-button:disabled{opacity:.55;cursor:wait}
 @media(max-width:760px){.development-note{align-items:stretch;flex-direction:column}.mini-button{width:100%}}
+
+
+.preview-logo-title{display:flex;align-items:center;justify-content:center;gap:14px}
+.preview-logo{width:58px;height:58px;object-fit:contain;flex:0 0 58px}
+@media(max-width:720px){.preview-logo{width:46px;height:46px;flex-basis:46px}.preview-logo-title{gap:10px}}
