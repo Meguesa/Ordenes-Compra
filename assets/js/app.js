@@ -215,8 +215,14 @@
     }
   }
 
-  async function saveDraft() {
-    const button = $('btnDraft');
+  function utf8ToBase64(value) {
+    const bytes = new TextEncoder().encode(value);
+    let binary = '';
+    bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+    return btoa(binary);
+  }
+
+  function saveDraft() {
     const data = currentData();
     persistLocal(data);
 
@@ -225,30 +231,11 @@
       return;
     }
 
-    button.disabled = true;
-    button.textContent = 'Guardando…';
     $('formStatus').textContent = 'Guardando borrador en SharePoint…';
-    try {
-      const result = await apiRequest('index.php?action=guardar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      context.itemId = result.itemId;
-      context.folio = result.folio;
-      $('folioDisplay').textContent = result.folio || 'PENDIENTE';
-      const saved = currentData();
-      persistLocal(saved);
-      $('formStatus').textContent = `${result.folio} guardado en BI_Ordenes_Compra como BORRADOR.`;
-      $('sharepointStatus').className = 'sharepoint-status ok';
-      $('sharepointStatus').textContent = 'SharePoint listo · último borrador guardado correctamente.';
-    } catch (error) {
-      if (error.payload?.code === 'SCHEMA_MISSING') showSchemaMissing(error.payload.missing);
-      $('formStatus').textContent = `No se guardó en SharePoint: ${error.message}. Se conservó una copia local.`;
-    } finally {
-      button.disabled = false;
-      button.textContent = 'Guardar borrador';
-    }
+    $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
+    $('btnDraft').disabled = true;
+    $('btnDraft').textContent = 'Guardando…';
+    $('odcForm').submit();
   }
 
   function populateDraft(data) {
@@ -257,8 +244,8 @@
     ids.forEach((id) => {
       if (data[id] !== undefined && $(id)) $(id).value = data[id];
     });
-    context.itemId = Number(data.itemId || 0);
-    context.folio = String(data.folio || '');
+    if (!context.itemId) context.itemId = Number(data.itemId || 0);
+    if (!context.folio) context.folio = String(data.folio || '');
     if (context.folio) $('folioDisplay').textContent = context.folio;
 
     list.innerHTML = '';
@@ -366,5 +353,17 @@
   let restored = null;
   try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
   if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
   checkSharepoint();
 })();
