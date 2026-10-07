@@ -129,6 +129,7 @@
       banco: $('banco').value.trim(),
       cuenta: $('cuenta').value.trim(),
       clabe: $('clabe').value.trim(),
+      observaciones: $('observaciones') ? $('observaciones').value.trim() : '',
       user: context.user || {},
       ivaPct: $('aplicaIva').checked ? numberValue($('ivaPct').value) : 0,
       retIsrPct: $('aplicaRetIsr').checked ? numberValue($('retIsrPct').value) : 0,
@@ -238,9 +239,38 @@
     $('odcForm').submit();
   }
 
+  function sendTestEmail() {
+    const data = currentData();
+    persistLocal(data);
+
+    if (context.prototype) {
+      $('formStatus').textContent = 'El correo de prueba solo puede enviarse desde el Portal publicado.';
+      return;
+    }
+
+    if (!context.folio || !context.itemId) {
+      $('formStatus').textContent = 'Guarda primero el borrador para obtener un folio antes de enviar el correo.';
+      return;
+    }
+
+    data.itemId = Number(context.itemId);
+    data.folio = String(context.folio);
+
+    $('formStatus').textContent = 'Enviando correo de prueba a gabriel.guerra@juanpablo.com.mx…';
+    $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
+
+    const actionInput = $('odcForm').querySelector('input[name="form_action"]');
+    actionInput.value = 'send_test_email';
+
+    const button = $('btnTestEmail');
+    button.disabled = true;
+    button.textContent = 'Enviando…';
+    $('odcForm').submit();
+  }
+
   function populateDraft(data) {
     if (!data || typeof data !== 'object') return;
-    const ids = ['fecha','proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe'];
+    const ids = ['fecha','proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe','observaciones'];
     ids.forEach((id) => {
       if (data[id] !== undefined && $(id)) $(id).value = data[id];
     });
@@ -378,6 +408,7 @@
   $('btnAddItem').addEventListener('click', () => addItem());
   $('btnDraft').addEventListener('click', saveDraft);
   $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', sendTestEmail);
   $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
   document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
@@ -400,6 +431,15 @@
     $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
   } else if (context.saveError) {
     $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'Correo de prueba enviado correctamente a ' + context.mailRecipient + '.';
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar el correo de prueba: ' + context.mailError;
   }
 
   checkSharepoint();
