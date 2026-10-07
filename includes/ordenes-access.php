@@ -290,7 +290,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
     if (!is_string($partidasJson)) throw new RuntimeException('No fue posible serializar las partidas.');
 
     $values = [
-        'Title' => $folio !== '' ? $folio : 'ODC-PREVIEW-PENDIENTE',
+        'Title' => $folio !== '' ? $folio : 'PENDIENTE',
         'Folio' => $folio,
         'Fecha' => $fecha,
         'EmpresaCompradora' => trim((string)($input['empresaCompradora'] ?? 'MEGUESA')),
@@ -326,7 +326,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
         $emailField = ordenes_field('SolicitanteCorreo');
         $existingOwner = $emailField !== null ? strtolower(trim((string)($existing[$emailField] ?? ''))) : '';
         if ($existingOwner !== '' && $existingOwner !== $userEmail) throw new RuntimeException('No tienes permiso para modificar este borrador.');
-        if ($folio === '') $folio = 'ODC-PREVIEW-' . str_pad((string)$itemId, 6, '0', STR_PAD_LEFT);
+        if ($folio === '' || preg_match('/^ODC-PREVIEW-\\d+$/', $folio)) $folio = str_pad((string)$itemId, 4, '0', STR_PAD_LEFT);
         $values['Title'] = $folio;
         $values['Folio'] = $folio;
         ordenes_update_item($itemId, $values);
@@ -334,7 +334,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
         $created = ordenes_create_item($values);
         $itemId = (int)($created['Id'] ?? $created['ID'] ?? 0);
         if ($itemId <= 0) throw new RuntimeException('SharePoint creo el registro, pero no devolvio su identificador.');
-        $folio = 'ODC-PREVIEW-' . str_pad((string)$itemId, 6, '0', STR_PAD_LEFT);
+        $folio = str_pad((string)$itemId, 4, '0', STR_PAD_LEFT);
         ordenes_update_item($itemId, ['Title' => $folio, 'Folio' => $folio]);
     }
 
