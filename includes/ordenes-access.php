@@ -122,14 +122,21 @@ function ordenes_aliases(): array {
       'IVA'=>['IVA'],'RetIsrPct'=>['RetIsrPct'],'RetencionISR'=>['RetencionISR','Retencion ISR'],'RetIvaPct'=>['RetIvaPct'],
       'RetencionIVA'=>['RetencionIVA','Retencion IVA'],'Total'=>['Total'],'Banco'=>['Banco'],'Cuenta'=>['Cuenta'],'CLABE'=>['CLABE'],
       'SolicitanteNombre'=>['SolicitanteNombre','Solicitante Nombre'],'SolicitanteCorreo'=>['SolicitanteCorreo','Solicitante Correo'],
-      'Estado'=>['Estado','Estatus'],'Ambiente'=>['Ambiente']
+      'Estado'=>['Estado','Estatus'],'Ambiente'=>['Ambiente'],
+      'Revision'=>['Revision'],
+      'HistorialAutorizacion'=>['HistorialAutorizacion','Historial Autorizacion'],
+      'UltimoComentario'=>['UltimoComentario','Ultimo Comentario'],
+      'UltimaRevisionPor'=>['UltimaRevisionPor','Ultima Revision Por'],
+      'UltimaRevisionCorreo'=>['UltimaRevisionCorreo','Ultima Revision Correo'],
+      'FechaEnvioAutorizacion'=>['FechaEnvioAutorizacion','Fecha Envio Autorizacion'],
+      'FechaResolucion'=>['FechaResolucion','Fecha Resolucion']
     ];
 }
 
 function ordenes_schema(): array {
-    $text=['Folio','EmpresaCompradora','Proveedor','Domicilio','RFC','Telefono','CiudadEstado','CondicionPago','TiempoEntrega','Moneda','Banco','Cuenta','CLABE','SolicitanteNombre','SolicitanteCorreo','Estado','Ambiente'];
-    $num=['TipoCambio','Subtotal','IvaPct','IVA','RetIsrPct','RetencionISR','RetIvaPct','RetencionIVA','Total'];
-    $out=['Fecha'=>'DateTime','PartidasJson'=>'Note']; foreach($text as $x)$out[$x]='Text'; foreach($num as $x)$out[$x]='Number'; return $out;
+    $text=['Folio','EmpresaCompradora','Proveedor','Domicilio','RFC','Telefono','CiudadEstado','CondicionPago','TiempoEntrega','Moneda','Banco','Cuenta','CLABE','SolicitanteNombre','SolicitanteCorreo','Estado','Ambiente','UltimaRevisionPor','UltimaRevisionCorreo'];
+    $num=['TipoCambio','Subtotal','IvaPct','IVA','RetIsrPct','RetencionISR','RetIvaPct','RetencionIVA','Total','Revision'];
+    $out=['Fecha'=>'DateTime','FechaEnvioAutorizacion'=>'DateTime','FechaResolucion'=>'DateTime','PartidasJson'=>'Note','HistorialAutorizacion'=>'Note','UltimoComentario'=>'Note']; foreach($text as $x)$out[$x]='Text'; foreach($num as $x)$out[$x]='Number'; return $out;
 }
 
 function ordenes_fields(bool $refresh=false): array {
