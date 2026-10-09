@@ -284,6 +284,22 @@ function ordenes_update_item(int $id,array $values): void {
 }
 
 
+function ordenes_sharepoint_delete_attachment(int $itemId,string $name): void
+{
+    if($itemId<=0 || trim($name)==='') return;
+    $s=ordenes_session();
+    $safe=str_replace("'","''",basename($name));
+    $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles/getByFileName('".$safe."')";
+    try{
+        ordenes_http_raw($url,'POST',[
+            'Authorization: Bearer '.$s['token'],
+            'Accept: application/json;odata=nometadata',
+            'IF-MATCH: *',
+            'X-HTTP-Method: DELETE',
+        ],'');
+    }catch(Throwable $e){}
+}
+
 function ordenes_sharepoint_add_attachment(int $itemId,string $name,string $bytes,string $mime='application/octet-stream'): void
 {
     if($itemId<=0) throw new InvalidArgumentException('ID invalido.');
