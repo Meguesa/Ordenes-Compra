@@ -924,7 +924,7 @@ function ordenes_process_authorization(int $itemId,array $user,string $action,st
         .'<p>Proveedor: '.htmlspecialchars($provider,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</p>'
         .'<p>Revision: R'.(int)$payload['revision'].'</p>'
         .'<p>Revisado por: '.htmlspecialchars($reviewerName,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</p>'
-        .'<p>Comentario: '.nl2br(htmlspecialchars($comment!==''?$comment:'Sin comentarios.',ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8')).'</p>'
+        .'<p>Comentarios: '.nl2br(htmlspecialchars(($allComments=implode("\n\n",array_values(array_filter(array_map(static fn($ev)=>is_array($ev)?trim((string)($ev['comentario']??'')):'',$history)))))!==''?$allComments:'Sin comentarios.',ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8')).'</p>'
         .'<p><a href="'.htmlspecialchars($reviewUrl,ENT_QUOTES,'UTF-8').'">Abrir ODC</a></p>';
 
     $to=$action==='RECHAZAR'?[$requester]:array_values(array_unique(array_merge([$requester],ordenes_approver_emails())));
