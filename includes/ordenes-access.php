@@ -791,6 +791,23 @@ function ordenes_list_user_records(array $user,string $estado): array
     return $out;
 }
 
+function ordenes_sp_graph_attachments(int $itemId): array
+{
+    $out=[];
+    foreach(ordenes_sharepoint_attachments($itemId) as $meta){
+        $name=(string)($meta['FileName']??'archivo');
+        $url=(string)($meta['ServerRelativeUrl']??'');
+        if($url==='') continue;
+        $out[]=[
+            '@odata.type'=>'#microsoft.graph.fileAttachment',
+            'name'=>$name,
+            'contentType'=>'application/octet-stream',
+            'contentBytes'=>base64_encode(ordenes_sharepoint_attachment_bytes($url)),
+        ];
+    }
+    return $out;
+}
+
 function ordenes_list_inbox_records(): array
 {
     $stateField=ordenes_field('Estado');
