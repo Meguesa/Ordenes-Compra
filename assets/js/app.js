@@ -253,11 +253,12 @@
     return btoa(binary);
   }
 
-  function saveDraft() {
+  async function saveDraft() {
     if (!syncDateFromDisplay()) {
       $('fechaDisplay').reportValidity();
       return;
     }
+
     const data = currentData();
     persistLocal(data);
 
@@ -266,11 +267,50 @@
       return;
     }
 
+    const button = $('btnDraft');
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Guardando…';
     $('formStatus').textContent = 'Guardando borrador en SharePoint…';
-    $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
-    $('btnDraft').disabled = true;
-    $('btnDraft').textContent = 'Guardando…';
-    $('odcForm').submit();
+
+    try {
+      const response = await fetch('nueva.php?action=guardar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-Token': context.csrf || ''
+        },
+        body: JSON.stringify(data)
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'No fue posible guardar el borrador.');
+      }
+
+      context.itemId = Number(result.itemId || 0);
+      context.folio = String(result.folio || '');
+      data.itemId = context.itemId;
+      data.folio = context.folio;
+      persistLocal(data);
+
+      if (context.folio) $('folioDisplay').textContent = context.folio;
+
+      const attachmentCount = $('attachments') && $('attachments').files
+        ? $('attachments').files.length
+        : 0;
+      $('formStatus').textContent = context.folio
+        ? context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.' +
+          (attachmentCount ? ' Los adjuntos seleccionados se conservaron para el envío.' : '')
+        : 'Borrador guardado correctamente.';
+    } catch (error) {
+      $('formStatus').textContent = 'No se pudo guardar el borrador: ' + (error && error.message ? error.message : String(error));
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
   }
 
   function validateAttachments() {
