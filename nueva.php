@@ -250,11 +250,18 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <div class="development-note">
     <div>
       <strong>Órdenes de Compra</strong>
-      <span>Las órdenes se registran en BI_Ordenes_Compra y pueden enviarse a Finanzas con su PDF y adjuntos.</span>
+      <span>Las órdenes se registran en BI_Ordenes_Compra y pasan por autorización de Finanzas antes de quedar aprobadas.</span>
       <span id="sharepointStatus" class="sharepoint-status">Verificando conexión con SharePoint…</span>
     </div>
     <button id="btnPrepareSharepoint" class="mini-button" type="button" hidden>Preparar lista SharePoint</button>
   </div>
+
+  <?php if(is_array($initialDraft) && strtoupper((string)($initialDraft['estado']??''))==='RECHAZADA'): ?>
+  <div class="rejection-notice">
+    <strong>Esta orden fue rechazada y requiere corrección.</strong>
+    <span><?= htmlspecialchars((string)($initialDraft['ultimoComentario']??'Sin comentario.'),ENT_QUOTES,'UTF-8') ?></span>
+  </div>
+  <?php endif; ?>
 
   <form id="odcForm" class="odc-form" method="post" action="/ordenes-compra/nueva.php" enctype="multipart/form-data" novalidate>
     <input type="hidden" name="form_action" value="save_draft">
@@ -456,7 +463,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
         <span>8</span>
         <div>
           <h2>Adjuntos</h2>
-          <p>Los archivos se enviarán únicamente por correo. No se guardan en SharePoint ni en el servidor.</p>
+          <p>Los archivos se guardarán con la ODC en SharePoint para que Finanzas pueda revisarlos durante la autorización.</p>
         </div>
       </div>
       <label class="attachment-upload">
@@ -475,7 +482,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
       <div class="form-actions">
         <button id="btnDraft" class="secondary-button" type="button">Guardar borrador</button>
         <button id="btnPreview" class="secondary-button" type="button">Vista previa PDF</button>
-        <button id="btnTestEmail" class="primary-button" type="button">Generar y enviar a Finanzas</button>
+        <button id="btnTestEmail" class="primary-button" type="button"><?= is_array($initialDraft) && strtoupper((string)($initialDraft['estado']??''))==='RECHAZADA'?'Reenviar a autorización':'Enviar a autorización' ?></button>
       </div>
     </section>
   </form>
@@ -515,6 +522,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'initialDraft' => is_array($initialDraft) ? $initialDraft : null,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261009-11"></script>
+<script src="assets/js/app.js?v=20261009-auth-2"></script>
 </body>
 </html>
