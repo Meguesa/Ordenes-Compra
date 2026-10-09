@@ -222,11 +222,21 @@ function ordenes_approver_emails(): array
     return ['finanzas@juanpablo.com.mx','admin.gerencia@juanpablo.com.mx'];
 }
 
+function ordenes_approver_access_emails(): array
+{
+    return [
+        'finanzas@juanpablo.com.mx',
+        'admin.gerencia@juanpablo.com.mx',
+        'gabriel.guerra@juanpablo.com.mx',
+        'sistemas@juanpablo.com.mx',
+    ];
+}
+
 function ordenes_user_is_approver(?array $user=null): bool
 {
     $user=$user??portal_user();
     $email=strtolower(trim((string)($user['email']??'')));
-    return $email!=='' && in_array($email,ordenes_approver_emails(),true);
+    return $email!=='' && in_array($email,ordenes_approver_access_emails(),true);
 }
 
 function ordenes_ensure_approval_schema(): void
