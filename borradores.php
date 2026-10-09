@@ -10,7 +10,12 @@ $user=portal_user();
 $name=htmlspecialchars(trim((string)($user['name']??'Usuario')),ENT_QUOTES,'UTF-8');
 $email=htmlspecialchars(strtolower(trim((string)($user['email']??''))),ENT_QUOTES,'UTF-8');
 $records=[];$error='';
-try{$records=ordenes_list_user_records($user,'BORRADOR');}catch(Throwable $e){$error=$e->getMessage();}
+try{
+    $records=array_merge(
+        ordenes_list_user_records($user,'RECHAZADA'),
+        ordenes_list_user_records($user,'BORRADOR')
+    );
+}catch(Throwable $e){$error=$e->getMessage();}
 function odc_draft_date(mixed $v): string {
     $s=substr(trim((string)$v),0,10);
     $d=DateTimeImmutable::createFromFormat('Y-m-d',$s);
@@ -21,7 +26,7 @@ function odc_draft_date(mixed $v): string {
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Borradores | Jardines de Juan Pablo</title>
-<link rel="stylesheet" href="styles.css?v=20261007-home-1">
+<link rel="stylesheet" href="styles.css?v=20261009-auth-1">
 </head>
 <body>
 <header class="tool-header">
@@ -53,8 +58,12 @@ function odc_draft_date(mixed $v): string {
           <div class="record-field record-provider"><span>Proveedor</span><strong><?= htmlspecialchars((string)($r['Proveedor']??''),ENT_QUOTES,'UTF-8') ?></strong></div>
           <div class="record-field"><span>Fecha</span><strong><?= htmlspecialchars(odc_draft_date($r['Fecha']??''),ENT_QUOTES,'UTF-8') ?></strong></div>
           <div class="record-field"><span>Total</span><strong>$<?= number_format((float)($r['Total']??0),2,'.',',') ?></strong></div>
-          <div class="record-field"><span>Estado</span><strong class="record-badge draft">Borrador</strong></div>
-          <div class="record-actions"><a class="primary-button button-link" href="nueva.php?draft=<?= (int)($r['id']??0) ?>">Continuar</a></div>
+          <?php $state=strtoupper((string)($r['Estado']??'BORRADOR')); ?>
+          <div class="record-field"><span>Estado</span><strong class="record-badge <?= $state==='RECHAZADA'?'rejected':'draft' ?>"><?= $state==='RECHAZADA'?'Rechazada':'Borrador' ?></strong></div>
+          <div class="record-actions"><a class="primary-button button-link" href="nueva.php?draft=<?= (int)($r['id']??0) ?>"><?= $state==='RECHAZADA'?'Corregir':'Continuar' ?></a></div>
+          <?php if($state==='RECHAZADA' && trim((string)($r['UltimoComentario']??''))!==''): ?>
+            <div class="record-comment"><strong>Comentario de Finanzas:</strong> <?= htmlspecialchars((string)$r['UltimoComentario'],ENT_QUOTES,'UTF-8') ?></div>
+          <?php endif; ?>
         </article>
       <?php endforeach; ?>
       </div>
