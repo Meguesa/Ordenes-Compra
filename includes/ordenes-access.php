@@ -73,6 +73,30 @@ function ordenes_http_json(string $url,string $method,array $headers,?string $bo
     return is_array($data)?$data:[];
 }
 
+function ordenes_http_raw(string $url,string $method,array $headers,string $body=''): string
+{
+    $ch=curl_init($url);
+    if($ch===false) throw new RuntimeException('No fue posible iniciar cURL.');
+    curl_setopt_array($ch,[
+        CURLOPT_RETURNTRANSFER=>true,
+        CURLOPT_FOLLOWLOCATION=>true,
+        CURLOPT_CONNECTTIMEOUT=>8,
+        CURLOPT_TIMEOUT=>40,
+        CURLOPT_CUSTOMREQUEST=>$method,
+        CURLOPT_HTTPHEADER=>$headers,
+        CURLOPT_POSTFIELDS=>$body,
+        CURLOPT_SSL_VERIFYPEER=>true,
+        CURLOPT_SSL_VERIFYHOST=>2,
+    ]);
+    $raw=curl_exec($ch);
+    $status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
+    $error=curl_error($ch);
+    curl_close($ch);
+    if($raw===false) throw new RuntimeException('Solicitud remota fallida: '.$error);
+    if($status<200 || $status>=300) throw new RuntimeException('SharePoint respondio HTTP '.$status.'.');
+    return (string)$raw;
+}
+
 function ordenes_b64url(string $v): string { return rtrim(strtr(base64_encode($v),'+/','-_'),'='); }
 
 function ordenes_graph_token(array $cfg): string {
