@@ -204,7 +204,9 @@ function ordenes_try_prepare_schema(): array {
     $s=ordenes_session(); $created=[];$errors=[];
     foreach(ordenes_missing_schema_fields() as $name){
         $type=ordenes_schema()[$name];
-        if($type==='DateTime')$xml='<Field Type="DateTime" Name="'.$name.'" DisplayName="'.$name.'" Format="DateOnly" />';
+        if($type==='DateTime')$xml=$name==='Fecha'
+            ? '<Field Type="DateTime" Name="'.$name.'" DisplayName="'.$name.'" Format="DateOnly" />'
+            : '<Field Type="DateTime" Name="'.$name.'" DisplayName="'.$name.'" Format="DateTime" />';
         elseif($type==='Number')$xml='<Field Type="Number" Name="'.$name.'" DisplayName="'.$name.'" Decimals="Automatic" />';
         elseif($type==='Note')$xml='<Field Type="Note" Name="'.$name.'" DisplayName="'.$name.'" NumLines="20" RichText="FALSE" />';
         else $xml='<Field Type="Text" Name="'.$name.'" DisplayName="'.$name.'" MaxLength="255" />';
