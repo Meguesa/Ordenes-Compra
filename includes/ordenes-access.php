@@ -191,6 +191,11 @@ function ordenes_try_prepare_schema(): array {
     ordenes_fields(true); return ['created'=>$created,'errors'=>$errors,'missing'=>ordenes_missing_schema_fields()];
 }
 
+function ordenes_approver_emails(): array
+{
+    return ['finanzas@juanpablo.com.mx','admin.gerencia@juanpablo.com.mx'];
+}
+
 function ordenes_required_schema_fields(): array {
     return ['Folio','Fecha','Proveedor','PartidasJson','Subtotal','IVA','RetencionISR','RetencionIVA','Total','SolicitanteCorreo','Estado','Ambiente'];
 }
