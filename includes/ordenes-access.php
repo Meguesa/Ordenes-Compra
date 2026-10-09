@@ -196,6 +196,13 @@ function ordenes_approver_emails(): array
     return ['finanzas@juanpablo.com.mx','admin.gerencia@juanpablo.com.mx'];
 }
 
+function ordenes_user_is_approver(?array $user=null): bool
+{
+    $user=$user??portal_user();
+    $email=strtolower(trim((string)($user['email']??'')));
+    return $email!=='' && in_array($email,ordenes_approver_emails(),true);
+}
+
 function ordenes_required_schema_fields(): array {
     return ['Folio','Fecha','Proveedor','PartidasJson','Subtotal','IVA','RetencionISR','RetencionIVA','Total','SolicitanteCorreo','Estado','Ambiente'];
 }
