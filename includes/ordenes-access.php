@@ -756,7 +756,7 @@ function ordenes_list_user_records(array $user,string $estado): array
     $estadoField=ordenes_field('Estado');
     if($emailField===null || $estadoField===null) throw new RuntimeException('No fue posible resolver los campos de consulta de Ordenes de Compra.');
 
-    $canonical=['Folio','Fecha','Proveedor','Total','Estado','SolicitanteCorreo'];
+    $canonical=['Folio','Fecha','Proveedor','Total','Estado','SolicitanteCorreo','SolicitanteNombre','Revision','UltimoComentario'];
     $resolved=['Id'];
     $fieldMap=[];
     foreach($canonical as $name){
