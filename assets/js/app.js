@@ -340,19 +340,19 @@
     persistLocal(data);
 
     if (context.prototype) {
-      $('formStatus').textContent = 'El correo solo puede enviarse desde el Portal publicado.';
+      $('formStatus').textContent = 'La autorización solo puede enviarse desde el Portal publicado.';
       return;
     }
 
     if (!context.folio || !context.itemId) {
-      $('formStatus').textContent = 'Guarda primero el borrador para obtener un folio antes de enviar el correo.';
+      $('formStatus').textContent = 'Guarda primero el borrador para obtener un folio antes de enviarlo a autorización.';
       return;
     }
 
     data.itemId = Number(context.itemId);
     data.folio = String(context.folio);
 
-    $('formStatus').textContent = 'Generando PDF y enviando Orden de Compra…';
+    $('formStatus').textContent = 'Guardando documentos y enviando ODC a autorización…';
     $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
 
     const actionInput = $('odcForm').querySelector('input[name="form_action"]');
@@ -360,7 +360,7 @@
 
     const button = $('btnTestEmail');
     button.disabled = true;
-    button.textContent = 'Enviando…';
+    button.textContent = 'Enviando a autorización…';
     $('odcForm').submit();
   }
 
@@ -582,9 +582,11 @@
     if (context.mailFolio) context.folio = context.mailFolio;
     if (context.mailItemId) context.itemId = Number(context.mailItemId);
     if (context.folio) $('folioDisplay').textContent = context.folio;
-    $('formStatus').textContent = 'Orden de Compra enviada correctamente a ' + context.mailRecipient + '.';
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
   } else if (context.mailError) {
-    $('formStatus').textContent = 'No se pudo enviar el correo: ' + context.mailError;
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
   }
 
   checkSharepoint();
