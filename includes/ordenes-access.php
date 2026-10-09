@@ -748,7 +748,7 @@ function ordenes_list_user_records(array $user,string $estado): array
     if($email==='') throw new RuntimeException('La sesion no contiene correo electronico.');
 
     $estado=strtoupper(trim($estado));
-    if(!in_array($estado,['BORRADOR','ENVIADA'],true)) throw new InvalidArgumentException('Estado de ODC no valido.');
+    if(!in_array($estado,['BORRADOR','RECHAZADA','PENDIENTE_AUTORIZACION','APROBADA'],true)) throw new InvalidArgumentException('Estado de ODC no valido.');
 
     $emailField=ordenes_field('SolicitanteCorreo');
     $estadoField=ordenes_field('Estado');
@@ -804,7 +804,7 @@ function ordenes_load_user_draft(int $itemId,array $user): array
     $state=$stateField!==null?strtoupper(trim((string)($item[$stateField]??''))):'';
 
     if($owner!==$email) throw new RuntimeException('No tienes permiso para abrir este borrador.');
-    if($state!=='BORRADOR') throw new RuntimeException('La orden seleccionada ya no es un borrador.');
+    if(!in_array($state,['BORRADOR','RECHAZADA'],true)) throw new RuntimeException('La orden seleccionada no esta disponible para correccion.');
 
     $get=static function(string $name) use ($item): mixed {
         $field=ordenes_field($name);
