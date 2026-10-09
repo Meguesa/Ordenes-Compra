@@ -889,6 +889,80 @@ function ordenes_item_payload(int $itemId): array
     ];
 }
 
+function ordenes_process_authorization(int $itemId,array $user,string $action,string $comment=''): array
+{
+    ordenes_ensure_approval_schema();
+    if(!ordenes_user_is_approver($user)) throw new RuntimeException('Tu cuenta no puede autorizar ordenes.');
+
+    $action=strtoupper(trim($action));
+    if(!in_array($action,['COMENTARIO','APROBAR','RECHAZAR'],true)) throw new InvalidArgumentException('Accion no valida.');
+    $comment=trim($comment);
+    if($action==='RECHAZAR' && $comment==='') throw new RuntimeException('El comentario es obligatorio para rechazar una ODC.');
+
+    $payload=ordenes_item_payload($itemId);
+    if(strtoupper($payload['estado'])!=='PENDIENTE_AUTORIZACION') throw new RuntimeException('Esta ODC ya no esta pendiente de autorizacion.');
+
+    $item=ordenes_get_item($itemId);
+    $history=ordenes_history_array($item);
+    $reviewerName=trim((string)($user['name']??'Autorizador'));
+    $reviewerEmail=strtolower(trim((string)($user['email']??'')));
+    $eventAction=$action==='COMENTARIO'?'COMENTARIO':($action==='APROBAR'?'APROBADA':'RECHAZADA');
+    $history[]=[
+        'fecha'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format(DATE_ATOM),
+        'revision'=>(int)$payload['revision'],
+        'accion'=>$eventAction,
+        'usuario'=>$reviewerName,
+        'correo'=>$reviewerEmail,
+        'comentario'=>$comment,
+    ];
+
+    $requester=(string)$payload['solicitanteCorreo'];
+    $folio=(string)$payload['folio'];
+    $provider=(string)$payload['proveedor'];
+    $reviewUrl='https://portal.juanpablo.com.mx/ordenes-compra/revisar.php?id='.$itemId;
+    $body='<h2>ODC '.$folio.' - '.$eventAction.'</h2>'
+        .'<p>Proveedor: '.htmlspecialchars($provider,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</p>'
+        .'<p>Revision: R'.(int)$payload['revision'].'</p>'
+        .'<p>Revisado por: '.htmlspecialchars($reviewerName,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</p>'
+        .'<p>Comentario: '.nl2br(htmlspecialchars($comment!==''?$comment:'Sin comentarios.',ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8')).'</p>'
+        .'<p><a href="'.htmlspecialchars($reviewUrl,ENT_QUOTES,'UTF-8').'">Abrir ODC</a></p>';
+
+    $to=$action==='RECHAZAR'?[$requester]:array_values(array_unique(array_merge([$requester],ordenes_approver_emails())));
+    $cc=['jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx'];
+    if($action==='RECHAZAR') $cc=array_merge(ordenes_approver_emails(),$cc);
+
+    $attachments=[];
+    if($action!=='COMENTARIO'){
+        $pdf=odc_pdf_generate($payload,['name'=>$payload['solicitanteNombre'],'email'=>$requester],(string)($_SERVER['DOCUMENT_ROOT']??''));
+        $attachments[]=[
+            '@odata.type'=>'#microsoft.graph.fileAttachment',
+            'name'=>'ODC_'.$folio.'.pdf',
+            'contentType'=>'application/pdf',
+            'contentBytes'=>base64_encode($pdf),
+        ];
+        $attachments=array_merge($attachments,ordenes_sp_graph_attachments($itemId));
+    }
+
+    ordenes_send_message($eventAction.' ODC '.$folio.' | '.$provider,$body,$to,$cc,$attachments);
+
+    $values=[
+        'HistorialAutorizacion'=>json_encode($history,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+        'UltimoComentario'=>$comment,
+        'UltimaRevisionPor'=>$reviewerName,
+        'UltimaRevisionCorreo'=>$reviewerEmail,
+    ];
+    if($action==='APROBAR'){
+        $values['Estado']='APROBADA';
+        $values['FechaResolucion']=(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s');
+    }elseif($action==='RECHAZAR'){
+        $values['Estado']='RECHAZADA';
+        $values['FechaResolucion']=(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s');
+    }
+    ordenes_update_item($itemId,$values);
+
+    return ['ok'=>true,'action'=>$eventAction,'folio'=>$folio];
+}
+
 function ordenes_load_user_draft(int $itemId,array $user): array
 {
     if($itemId<=0) throw new InvalidArgumentException('Borrador invalido.');
