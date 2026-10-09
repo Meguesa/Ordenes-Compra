@@ -17,7 +17,7 @@ $email = htmlspecialchars(strtolower(trim((string)($user['email'] ?? ''))), ENT_
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-home-1">
+  <link rel="stylesheet" href="styles.css?v=20261009-auth-1">
 </head>
 <body>
 <header class="tool-header">
@@ -79,6 +79,16 @@ $email = htmlspecialchars(strtolower(trim((string)($user['email'] ?? ''))), ENT_
       <p>Continúa órdenes guardadas previamente antes de enviarlas a Finanzas.</p>
       <a class="primary-button selector-action" href="borradores.php">Ver borradores</a>
     </article>
+
+    <?php if (ordenes_user_is_approver($user)): ?>
+    <article class="selector-card">
+      <div class="selector-card-top"><span class="selector-card-kicker">AUTORIZACIONES</span><span class="selector-card-status available">Disponible</span></div>
+      <div class="selector-card-icon">✓</div>
+      <h2>Buzón</h2>
+      <p>Revisa órdenes pendientes de autorización, agrega comentarios y aprueba o rechaza solicitudes.</p>
+      <a class="primary-button selector-action" href="buzon.php">Abrir buzón</a>
+    </article>
+    <?php endif; ?>
   </section>
 
   <p class="selector-account-note">Sesión activa: <?= $email !== '' ? $email : 'Usuario autenticado' ?>.</p>
