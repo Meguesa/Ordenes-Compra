@@ -284,6 +284,42 @@ function ordenes_update_item(int $id,array $values): void {
 }
 
 
+function ordenes_sharepoint_add_attachment(int $itemId,string $name,string $bytes,string $mime='application/octet-stream'): void
+{
+    if($itemId<=0) throw new InvalidArgumentException('ID invalido.');
+    $safeName=basename(trim($name));
+    if($safeName==='') throw new InvalidArgumentException('Nombre de archivo invalido.');
+    $s=ordenes_session();
+    $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles/add(FileName='".str_replace("'","''",$safeName)."')";
+    ordenes_http_raw($url,'POST',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+        'Content-Type: '.$mime,
+    ],$bytes);
+}
+
+function ordenes_sharepoint_attachments(int $itemId): array
+{
+    if($itemId<=0) return [];
+    $s=ordenes_session();
+    $data=ordenes_http_json(
+        ordenes_list_base()."/items(".$itemId.")/AttachmentFiles?\$select=FileName,ServerRelativeUrl",
+        'GET',
+        ['Authorization: Bearer '.$s['token'],'Accept: application/json;odata=nometadata']
+    );
+    return array_values(array_filter($data['value']??[],static fn($x)=>is_array($x)));
+}
+
+function ordenes_sharepoint_attachment_bytes(string $serverRelativeUrl): string
+{
+    $s=ordenes_session();
+    $url=rtrim($s['siteUrl'],'/')."/_api/web/GetFileByServerRelativeUrl('".str_replace("'","''",$serverRelativeUrl)."')/\$value";
+    return ordenes_http_raw($url,'GET',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/octet-stream',
+    ]);
+}
+
 function ordenes_num_value(mixed $value): float
 {
     return is_numeric($value) ? (float)$value : 0.0;
