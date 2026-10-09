@@ -791,6 +791,85 @@ function ordenes_list_user_records(array $user,string $estado): array
     return $out;
 }
 
+function ordenes_list_inbox_records(): array
+{
+    $stateField=ordenes_field('Estado');
+    if($stateField===null) throw new RuntimeException('No fue posible resolver el estado de las ODC.');
+    $canonical=['Folio','Fecha','Proveedor','Total','Estado','SolicitanteNombre','SolicitanteCorreo','Revision'];
+    $resolved=['Id']; $fieldMap=[];
+    foreach($canonical as $name){
+        $field=ordenes_field($name);
+        if($field!==null){ $resolved[]=$field; $fieldMap[$name]=$field; }
+    }
+    $query=http_build_query([
+        '$select'=>implode(',',array_values(array_unique($resolved))),
+        '$filter'=>$stateField." eq 'PENDIENTE_AUTORIZACION'",
+        '$orderby'=>'Id desc',
+        '$top'=>'100',
+    ],'','&',PHP_QUERY_RFC3986);
+    $s=ordenes_session();
+    $data=ordenes_http_json(ordenes_list_base().'/items?'.$query,'GET',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+    ]);
+    $out=[];
+    foreach(($data['value']??[]) as $row){
+        if(!is_array($row)) continue;
+        $record=['id'=>(int)($row['Id']??0)];
+        foreach($fieldMap as $canonicalName=>$internalName) $record[$canonicalName]=$row[$internalName]??null;
+        $out[]=$record;
+    }
+    return $out;
+}
+
+function ordenes_item_payload(int $itemId): array
+{
+    $item=ordenes_get_item($itemId);
+    $get=static function(string $name) use ($item): mixed {
+        $field=ordenes_field($name);
+        return $field!==null?($item[$field]??null):null;
+    };
+    $items=[];
+    $raw=(string)($get('PartidasJson')??'');
+    if($raw!==''){
+        $decoded=json_decode($raw,true);
+        if(is_array($decoded)) $items=$decoded;
+    }
+    return [
+        'itemId'=>$itemId,
+        'folio'=>(string)($get('Folio')??''),
+        'fecha'=>substr((string)($get('Fecha')??''),0,10),
+        'empresaCompradora'=>(string)($get('EmpresaCompradora')??'MEGUESA'),
+        'proveedor'=>(string)($get('Proveedor')??''),
+        'domicilio'=>(string)($get('Domicilio')??''),
+        'rfc'=>(string)($get('RFC')??''),
+        'telefono'=>(string)($get('Telefono')??''),
+        'ciudadEstado'=>(string)($get('CiudadEstado')??''),
+        'condicionPago'=>(string)($get('CondicionPago')??''),
+        'tiempoEntrega'=>(string)($get('TiempoEntrega')??''),
+        'moneda'=>(string)($get('Moneda')??'MXN'),
+        'tipoCambio'=>(float)($get('TipoCambio')??1),
+        'items'=>$items,
+        'subtotal'=>(float)($get('Subtotal')??0),
+        'ivaPct'=>(float)($get('IvaPct')??0),
+        'iva'=>(float)($get('IVA')??0),
+        'retIsrPct'=>(float)($get('RetIsrPct')??0),
+        'retIsr'=>(float)($get('RetencionISR')??0),
+        'retIvaPct'=>(float)($get('RetIvaPct')??0),
+        'retIva'=>(float)($get('RetencionIVA')??0),
+        'total'=>(float)($get('Total')??0),
+        'banco'=>(string)($get('Banco')??''),
+        'cuenta'=>(string)($get('Cuenta')??''),
+        'clabe'=>(string)($get('CLABE')??''),
+        'solicitanteNombre'=>(string)($get('SolicitanteNombre')??''),
+        'solicitanteCorreo'=>(string)($get('SolicitanteCorreo')??''),
+        'estado'=>(string)($get('Estado')??''),
+        'revision'=>(int)($get('Revision')??0),
+        'ultimoComentario'=>(string)($get('UltimoComentario')??''),
+        'historial'=>ordenes_history_array($item),
+    ];
+}
+
 function ordenes_load_user_draft(int $itemId,array $user): array
 {
     if($itemId<=0) throw new InvalidArgumentException('Borrador invalido.');
