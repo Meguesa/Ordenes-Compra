@@ -41,6 +41,62 @@ function odc_pdf_clip(string $text,int $max): string
     return rtrim(mb_substr($text,0,max(1,$max-3),'UTF-8')).'...';
 }
 
+function odc_pdf_estimated_width(string $text,float $size): float
+{
+    $clean=odc_pdf_escape($text);
+    $length=strlen($clean);
+    return $length*$size*0.49;
+}
+
+function odc_pdf_fit_text(string &$s,float $x,float $y,string $text,float $maxWidth,float $maxSize=7.0,float $minSize=3.6,bool $bold=false): void
+{
+    $text=trim(preg_replace('/\s+/u',' ',$text)??$text);
+    if($text==='') return;
+
+    $size=$maxSize;
+    while($size>$minSize && odc_pdf_estimated_width($text,$size)>$maxWidth){
+        $size-=0.2;
+    }
+
+    if(odc_pdf_estimated_width($text,$size)<=$maxWidth){
+        odc_pdf_text($s,$x,$y,$text,$size,$bold);
+        return;
+    }
+
+    $words=preg_split('/\s+/u',$text)?:[$text];
+    $lines=[''];
+    foreach($words as $word){
+        $idx=count($lines)-1;
+        $candidate=trim($lines[$idx].' '.$word);
+        if(odc_pdf_estimated_width($candidate,$minSize)<=$maxWidth){
+            $lines[$idx]=$candidate;
+            continue;
+        }
+        if(count($lines)<2){
+            $lines[]=$word;
+        }else{
+            $lines[1]=trim($lines[1].' '.$word);
+        }
+    }
+
+    $line1=$lines[0]??'';
+    $line2=$lines[1]??'';
+    if($line2!=='' && odc_pdf_estimated_width($line2,$minSize)>$maxWidth){
+        $size=$minSize;
+        while($size>2.8 && (
+            odc_pdf_estimated_width($line1,$size)>$maxWidth ||
+            odc_pdf_estimated_width($line2,$size)>$maxWidth
+        )){
+            $size-=0.2;
+        }
+    }else{
+        $size=$minSize;
+    }
+
+    odc_pdf_text($s,$x,$y+2.6,$line1,$size,$bold);
+    if($line2!=='') odc_pdf_text($s,$x,$y-3.2,$line2,$size,$bold);
+}
+
 function odc_pdf_date(string $date): string
 {
     if(preg_match('/^(\d{4})-(\d{2})-(\d{2})$/',$date,$m)) return $m[3].'/'.$m[2].'/'.$m[1];
@@ -98,9 +154,9 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
         $y=$top-$rh*($i+1); $x=$left;
         foreach($cols as $w){ odc_pdf_box($s,$x,$y,$w,$rh,false); $x+=$w; }
         odc_pdf_text($s,$left+4,$y+6,$row[0],7,true);
-        odc_pdf_text($s,$left+$cols[0]+4,$y+6,odc_pdf_clip($row[1],44),7,false);
+        odc_pdf_fit_text($s,$left+$cols[0]+4,$y+6,$row[1],$cols[1]-8,7,3.6,false);
         if($row[2]!=='') odc_pdf_text($s,$left+$cols[0]+$cols[1]+4,$y+6,$row[2],7,true);
-        if($row[3]!=='') odc_pdf_text($s,$left+$cols[0]+$cols[1]+$cols[2]+4,$y+6,odc_pdf_clip($row[3],24),7,false);
+        if($row[3]!=='') odc_pdf_fit_text($s,$left+$cols[0]+$cols[1]+$cols[2]+4,$y+6,$row[3],$cols[3]-8,7,3.6,false);
     }
 
     $tableTop=535.0; $hh=24.0; $ih=22.0; $ic=[90.0,268.0,82.0,88.0];
@@ -119,7 +175,7 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
         $it=$items[$i]; $qty=(float)($it['qty']??0); $price=(float)($it['price']??0);
         $amount=(float)($it['amount']??($qty*$price));
         odc_pdf_text($s,92,$y+8,$qty==(int)$qty?(string)(int)$qty:number_format($qty,2,'.',''),7,false);
-        odc_pdf_text($s,137,$y+8,odc_pdf_clip((string)($it['description']??''),54),6.6,false);
+        odc_pdf_fit_text($s,137,$y+8,(string)($it['description']??''),$ic[1]-10,6.6,3.2,false);
         odc_pdf_text($s,410,$y+8,odc_pdf_money($price,$currency),7,false);
         odc_pdf_text($s,505,$y+8,odc_pdf_money($amount,$currency),7,false);
     }
@@ -129,7 +185,7 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
     odc_pdf_text($s,70,$bottom-15,'FAVOR DE CONFIRMAR RECEPCION DE OC',9,true);
     odc_pdf_text($s,$left,$bottom-46,'CONFIRMACION DE REQUISICION',8,false);
     odc_pdf_text($s,$left,$bottom-68,'NOMBRE:',7,false);
-    odc_pdf_text($s,95,$bottom-68,odc_pdf_clip(trim((string)($user['name']??'')),36),8,true);
+    odc_pdf_fit_text($s,95,$bottom-68,trim((string)($user['name']??'')),240,8,4.5,true);
     odc_pdf_line($s,94,$bottom-71,340,$bottom-71);
     odc_pdf_text($s,$left,$bottom-89,'PUESTO:',7,false); odc_pdf_line($s,94,$bottom-92,340,$bottom-92);
     odc_pdf_text($s,$left,$bottom-110,'FIRMA:',7,false); odc_pdf_line($s,94,$bottom-113,340,$bottom-113);
@@ -143,9 +199,9 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
         odc_pdf_text($s,420,$y+6,$row[0],7,$i===4);
         odc_pdf_text($s,505,$y+6,odc_pdf_money((float)$row[1],$currency),7,true);
     }
-    odc_pdf_text($s,350,$bottom-122,'No. Cuenta: '.odc_pdf_clip(trim((string)($d['cuenta']??'')),28),7,false);
-    odc_pdf_text($s,350,$bottom-137,'No. Clabe: '.odc_pdf_clip(trim((string)($d['clabe']??'')),28),7,false);
-    odc_pdf_text($s,350,$bottom-152,'Banco: '.odc_pdf_clip(trim((string)($d['banco']??'')),28),7,false);
+    odc_pdf_fit_text($s,350,$bottom-122,'No. Cuenta: '.trim((string)($d['cuenta']??'')),220,7,4.2,false);
+    odc_pdf_fit_text($s,350,$bottom-137,'No. Clabe: '.trim((string)($d['clabe']??'')),220,7,4.2,false);
+    odc_pdf_fit_text($s,350,$bottom-152,'Banco: '.trim((string)($d['banco']??'')),220,7,4.2,false);
 
     $objects=[];
     $objects[1]='<< /Type /Catalog /Pages 2 0 R >>';
