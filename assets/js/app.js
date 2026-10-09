@@ -312,7 +312,7 @@
     data.itemId = Number(context.itemId);
     data.folio = String(context.folio);
 
-    $('formStatus').textContent = 'Enviando correo a gabriel.guerra@juanpablo.com.mx…';
+    $('formStatus').textContent = 'Generando PDF y enviando Orden de Compra…';
     $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
 
     const actionInput = $('odcForm').querySelector('input[name="form_action"]');
