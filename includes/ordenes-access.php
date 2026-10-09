@@ -203,6 +203,16 @@ function ordenes_user_is_approver(?array $user=null): bool
     return $email!=='' && in_array($email,ordenes_approver_emails(),true);
 }
 
+function ordenes_ensure_approval_schema(): void
+{
+    $needed=['Revision','HistorialAutorizacion','UltimoComentario','UltimaRevisionPor','UltimaRevisionCorreo','FechaEnvioAutorizacion','FechaResolucion'];
+    $missing=array_values(array_intersect(ordenes_missing_schema_fields(),$needed));
+    if(!$missing) return;
+    $result=ordenes_try_prepare_schema();
+    $still=array_values(array_intersect($result['missing']??[],$needed));
+    if($still) throw new RuntimeException('Faltan columnas del flujo de autorizacion: '.implode(', ',$still).'.');
+}
+
 function ordenes_required_schema_fields(): array {
     return ['Folio','Fecha','Proveedor','PartidasJson','Subtotal','IVA','RetencionISR','RetencionIVA','Total','SolicitanteCorreo','Estado','Ambiente'];
 }
