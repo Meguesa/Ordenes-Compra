@@ -511,7 +511,7 @@ function ordenes_graph_send_mail_with_retry(string $sender,string $token,string 
     throw new RuntimeException('Microsoft Graph respondio HTTP '.$lastStatus.($lastDetail!==''?': '.$lastDetail:'.'));
 }
 
-function ordenes_send_test_email(array $input,array $user,array $files=[]): array
+function ordenes_send_email(array $input,array $user,array $files=[]): array
 {
     $folio=trim((string)($input['folio']??''));
     $itemId=(int)($input['itemId']??0);
