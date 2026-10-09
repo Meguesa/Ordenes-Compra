@@ -10,7 +10,14 @@ $user=portal_user();
 $name=htmlspecialchars(trim((string)($user['name']??'Usuario')),ENT_QUOTES,'UTF-8');
 $email=htmlspecialchars(strtolower(trim((string)($user['email']??''))),ENT_QUOTES,'UTF-8');
 $records=[];$error='';
-try{$records=ordenes_list_user_records($user,'ENVIADA');}catch(Throwable $e){$error=$e->getMessage();}
+try{
+    $records=array_merge(
+        ordenes_list_user_records($user,'PENDIENTE_AUTORIZACION'),
+        ordenes_list_user_records($user,'APROBADA'),
+        ordenes_list_user_records($user,'ENVIADA')
+    );
+    usort($records,static fn(array $a,array $b):int=>((int)($b['id']??0))<=>((int)($a['id']??0)));
+}catch(Throwable $e){$error=$e->getMessage();}
 function odc_list_date(mixed $v): string {
     $s=substr(trim((string)$v),0,10);
     $d=DateTimeImmutable::createFromFormat('Y-m-d',$s);
@@ -21,7 +28,7 @@ function odc_list_date(mixed $v): string {
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Órdenes | Jardines de Juan Pablo</title>
-<link rel="stylesheet" href="styles.css?v=20261007-home-1">
+<link rel="stylesheet" href="styles.css?v=20261009-auth-1">
 </head>
 <body>
 <header class="tool-header">
@@ -33,7 +40,7 @@ function odc_list_date(mixed $v): string {
 </header>
 <main class="shell main-content records-home">
   <section class="form-banner">
-    <div><p class="eyebrow">Historial</p><h1>Órdenes</h1><p>Consulta tus órdenes de compra enviadas a Finanzas.</p></div>
+    <div><p class="eyebrow">Historial</p><h1>Órdenes</h1><p>Consulta el estado de tus órdenes de compra.</p></div>
     <a class="primary-button button-link" href="nueva.php?nuevo=1">＋ Nueva Orden</a>
   </section>
   <section class="record-menu-grid">
@@ -42,18 +49,20 @@ function odc_list_date(mixed $v): string {
   </section>
   <?php if($error!==''): ?><div class="records-message error"><?= htmlspecialchars($error,ENT_QUOTES,'UTF-8') ?></div><?php endif; ?>
   <section class="records-panel">
-    <div class="records-panel-heading"><div><h2>Órdenes enviadas</h2><p>Registros asociados a tu cuenta.</p></div><a class="secondary-button button-link" href="ordenes.php">Actualizar</a></div>
+    <div class="records-panel-heading"><div><h2>Órdenes enviadas y autorizaciones</h2><p>Registros asociados a tu cuenta.</p></div><a class="secondary-button button-link" href="ordenes.php">Actualizar</a></div>
     <?php if(!$records): ?>
       <div class="records-empty">No tienes órdenes enviadas todavía.</div>
     <?php else: ?>
       <div class="records-list">
       <?php foreach($records as $r): ?>
-        <article class="record-card">
+        <article class="record-card has-action">
           <div class="record-field"><span>Folio</span><strong><?= htmlspecialchars((string)($r['Folio']??''),ENT_QUOTES,'UTF-8') ?></strong></div>
           <div class="record-field record-provider"><span>Proveedor</span><strong><?= htmlspecialchars((string)($r['Proveedor']??''),ENT_QUOTES,'UTF-8') ?></strong></div>
           <div class="record-field"><span>Fecha</span><strong><?= htmlspecialchars(odc_list_date($r['Fecha']??''),ENT_QUOTES,'UTF-8') ?></strong></div>
           <div class="record-field"><span>Total</span><strong>$<?= number_format((float)($r['Total']??0),2,'.',',') ?></strong></div>
-          <div class="record-field"><span>Estado</span><strong class="record-badge sent">Enviada</strong></div>
+          <?php $state=strtoupper((string)($r['Estado']??'ENVIADA')); ?>
+          <div class="record-field"><span>Estado</span><strong class="record-badge <?= $state==='APROBADA'||$state==='ENVIADA'?'sent':'pending' ?>"><?= $state==='PENDIENTE_AUTORIZACION'?'Pendiente autorización':($state==='APROBADA'?'Aprobada':'Enviada') ?></strong></div>
+          <div class="record-actions"><a class="secondary-button button-link" target="_blank" href="pdf.php?id=<?= (int)($r['id']??0) ?>">Ver PDF</a></div>
         </article>
       <?php endforeach; ?>
       </div>
