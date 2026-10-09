@@ -616,100 +616,131 @@ function ordenes_graph_send_mail_with_retry(string $sender,string $token,string 
     throw new RuntimeException('Microsoft Graph respondio HTTP '.$lastStatus.($lastDetail!==''?': '.$lastDetail:'.'));
 }
 
-function ordenes_send_email(array $input,array $user,array $files=[]): array
+function ordenes_send_message(string $subject,string $html,array $to,array $cc,array $attachments=[]): void
 {
-    $folio=trim((string)($input['folio']??''));
-    $itemId=(int)($input['itemId']??0);
-
-    if($itemId<=0 || !preg_match('/^\d{4,}$/',$folio)) {
-        throw new RuntimeException('Guarda primero la ODC como borrador antes de enviar el correo.');
-    }
-
-    if(!ordenes_user_has_preview_access($user)) {
-        throw new RuntimeException('Tu cuenta no puede enviar correos.');
-    }
-
-    $toAddresses=[
-        'finanzas@juanpablo.com.mx',
-        'admin.gerencia@juanpablo.com.mx',
-        'jose.santana@juanpablo.com.mx',
-        'gabriel.guerra@juanpablo.com.mx',
-    ];
-    $requesterEmail=strtolower(trim((string)($user['email']??'')));
-    $ccAddresses=[];
-    if($requesterEmail!=='' && !in_array($requesterEmail,$toAddresses,true)) {
-        $ccAddresses[]=$requesterEmail;
-    }
-    $recipient=implode(', ',$toAddresses);
-    $sender='sistemas@juanpablo.com.mx';
-    $proveedor=trim((string)($input['proveedor']??''));
-    $observaciones=trim((string)($input['observaciones']??''));
-    $moneda=strtoupper(trim((string)($input['moneda']??'MXN')));
-    $total=(float)($input['total']??0);
-
-    $h=static fn(string $value):string=>htmlspecialchars($value,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
-    $totalText=($moneda==='USD'?'US$':'$').number_format($total,2,'.',',');
-    $obsHtml=$observaciones!==''?nl2br($h($observaciones)):'<em>Sin observaciones.</em>';
-
-    $html='<!doctype html><html><body style="margin:0;background:#f5f1ec;font-family:Arial,sans-serif;color:#2b1b15">'
-      .'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 10px;background:#f5f1ec"><tr><td align="center">'
-      .'<table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#fff;border:1px solid #e4d9cf;border-radius:12px;overflow:hidden">'
-      .'<tr><td style="padding:22px 26px;border-top:5px solid #e28a16">'
-      .'<div style="font-size:11px;letter-spacing:1.4px;font-weight:700;color:#225b8a">JARDINES DE JUAN PABLO</div>'
-      .'<h1 style="font-size:22px;margin:8px 0 4px">Orden de Compra '.$h($folio).'</h1>'
-      .'<p style="margin:0;color:#6b625d">Orden de Compra generada desde el Portal Interno de Jardines de Juan Pablo.</p>'
-      .'</td></tr><tr><td style="padding:0 26px 24px">'
-      .'<table width="100%" cellspacing="0" cellpadding="8" style="border-collapse:collapse;font-size:14px">'
-      .'<tr><td style="font-weight:700;border-bottom:1px solid #eee7e1">Proveedor</td><td style="border-bottom:1px solid #eee7e1">'.$h($proveedor).'</td></tr>'
-      .'<tr><td style="font-weight:700;border-bottom:1px solid #eee7e1">Total</td><td style="border-bottom:1px solid #eee7e1">'.$h($totalText).'</td></tr>'
-      .'<tr><td style="font-weight:700;border-bottom:1px solid #eee7e1">Solicitante</td><td style="border-bottom:1px solid #eee7e1">'.$h((string)($user['name']??'')).'</td></tr>'
-      .'</table>'
-      .'<div style="margin-top:20px;padding:14px 16px;background:#fff8e6;border:1px solid #efd48a;border-radius:8px">'
-      .'<strong>Observaciones</strong><div style="margin-top:8px;line-height:1.5">'.$obsHtml.'</div></div>'
-      .'<p style="margin:20px 0 0;color:#756a64;font-size:12px">Destinatarios: '.$h($recipient).($ccAddresses?'. Copia al solicitante: '.$h(implode(', ',$ccAddresses)):'').'.</p>'
-      .'</td></tr></table></td></tr></table></body></html>';
-
-    $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
-    if(!str_starts_with($pdf,'%PDF-')) {
-        throw new RuntimeException('No fue posible generar un PDF valido para la ODC.');
-    }
-    $attachmentName='ODC_'.$folio.'.pdf';
-
     $request=[
         'message'=>[
-            'subject'=>'Orden de Compra '.$folio.' | '.$proveedor,
+            'subject'=>$subject,
             'body'=>['contentType'=>'HTML','content'=>$html],
-            'toRecipients'=>array_map(static fn(string $address):array=>['emailAddress'=>['address'=>$address]],$toAddresses),
-            'ccRecipients'=>array_map(static fn(string $address):array=>['emailAddress'=>['address'=>$address]],$ccAddresses),
-            'attachments'=>array_merge([[
-                '@odata.type'=>'#microsoft.graph.fileAttachment',
-                'name'=>$attachmentName,
-                'contentType'=>'application/pdf',
-                'contentBytes'=>base64_encode($pdf),
-            ]], ordenes_prepare_uploaded_attachments($files)),
+            'toRecipients'=>array_map(static fn(string $address):array=>['emailAddress'=>['address'=>$address]],array_values(array_unique($to))),
+            'ccRecipients'=>array_map(static fn(string $address):array=>['emailAddress'=>['address'=>$address]],array_values(array_unique($cc))),
+            'attachments'=>$attachments,
         ],
         'saveToSentItems'=>true,
     ];
-
     $json=json_encode($request,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     if(!is_string($json)) throw new RuntimeException('No fue posible preparar el correo.');
-
     $token=ordenes_mail_graph_token();
-    ordenes_graph_send_mail_with_retry($sender,$token,$json);
-    ordenes_update_item($itemId, [
-        'Estado' => 'ENVIADA',
-        'Ambiente' => 'PRODUCCION',
+    ordenes_graph_send_mail_with_retry('sistemas@juanpablo.com.mx',$token,$json);
+}
+
+function ordenes_history_array(array $item): array
+{
+    $field=ordenes_field('HistorialAutorizacion');
+    if($field===null) return [];
+    $raw=trim((string)($item[$field]??''));
+    if($raw==='') return [];
+    $decoded=json_decode($raw,true);
+    return is_array($decoded)?$decoded:[];
+}
+
+function ordenes_send_email(array $input,array $user,array $files=[]): array
+{
+    ordenes_ensure_approval_schema();
+
+    $folio=trim((string)($input['folio']??''));
+    $itemId=(int)($input['itemId']??0);
+    if($itemId<=0 || !preg_match('/^\d{4,}$/',$folio)) {
+        throw new RuntimeException('Guarda primero la ODC como borrador antes de enviarla a autorizacion.');
+    }
+
+    $requesterEmail=strtolower(trim((string)($user['email']??'')));
+    $requesterName=trim((string)($user['name']??'Usuario'));
+    $item=ordenes_get_item($itemId);
+    $ownerField=ordenes_field('SolicitanteCorreo');
+    $owner=$ownerField!==null?strtolower(trim((string)($item[$ownerField]??''))):'';
+    if($owner!=='' && $owner!==$requesterEmail) throw new RuntimeException('No tienes permiso para enviar esta ODC.');
+
+    $stateField=ordenes_field('Estado');
+    $state=$stateField!==null?strtoupper(trim((string)($item[$stateField]??''))):'';
+    if(!in_array($state,['BORRADOR','RECHAZADA'],true)) {
+        throw new RuntimeException('Esta ODC no esta disponible para envio a autorizacion.');
+    }
+
+    $revField=ordenes_field('Revision');
+    $currentRevision=$revField!==null?(int)($item[$revField]??0):0;
+    $revision=max(1,$currentRevision+1);
+
+    $uploaded=ordenes_prepare_uploaded_attachments($files);
+    foreach($uploaded as $attachment){
+        $original=basename((string)($attachment['name']??'archivo'));
+        $stored='R'.$revision.'_'.$original;
+        ordenes_sharepoint_delete_attachment($itemId,$stored);
+        ordenes_sharepoint_add_attachment(
+            $itemId,
+            $stored,
+            base64_decode((string)($attachment['contentBytes']??''),true)?:'',
+            (string)($attachment['contentType']??'application/octet-stream')
+        );
+    }
+
+    $history=ordenes_history_array($item);
+    $history[]=[
+        'fecha'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format(DATE_ATOM),
+        'revision'=>$revision,
+        'accion'=>'ENVIADA_AUTORIZACION',
+        'usuario'=>$requesterName,
+        'correo'=>$requesterEmail,
+        'comentario'=>trim((string)($input['observaciones']??'')),
+    ];
+
+    $proveedor=trim((string)($input['proveedor']??''));
+    $moneda=strtoupper(trim((string)($input['moneda']??'MXN')));
+    $total=(float)($input['total']??0);
+    $totalText=($moneda==='USD'?'US$':'$').number_format($total,2,'.',',');
+    $reviewUrl='https://portal.juanpablo.com.mx/ordenes-compra/revisar.php?id='.$itemId;
+    $h=static fn(string $v):string=>htmlspecialchars($v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+
+    $html='<h2>Orden de Compra '.$h($folio).' pendiente de autorizacion</h2>'
+        .'<p><strong>Solicitante:</strong> '.$h($requesterName).'</p>'
+        .'<p><strong>Proveedor:</strong> '.$h($proveedor).'</p>'
+        .'<p><strong>Total:</strong> '.$h($totalText).'</p>'
+        .'<p><strong>Revision:</strong> R'.$revision.'</p>'
+        .'<p><a href="'.$h($reviewUrl).'">Abrir en el Buzon de Ordenes</a></p>';
+
+    $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
+    $emailAttachments=[[
+        '@odata.type'=>'#microsoft.graph.fileAttachment',
+        'name'=>'ODC_'.$folio.'.pdf',
+        'contentType'=>'application/pdf',
+        'contentBytes'=>base64_encode($pdf),
+    ]];
+    $emailAttachments=array_merge($emailAttachments,$uploaded);
+
+    $to=ordenes_approver_emails();
+    $cc=array_values(array_filter([$requesterEmail,'jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx']));
+    ordenes_send_message('AUTORIZACION ODC '.$folio.' | '.$proveedor,$html,$to,$cc,$emailAttachments);
+
+    ordenes_update_item($itemId,[
+        'Estado'=>'PENDIENTE_AUTORIZACION',
+        'Revision'=>$revision,
+        'HistorialAutorizacion'=>json_encode($history,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+        'UltimoComentario'=>trim((string)($input['observaciones']??'')),
+        'UltimaRevisionPor'=>'',
+        'UltimaRevisionCorreo'=>'',
+        'FechaEnvioAutorizacion'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s'),
+        'FechaResolucion'=>null,
+        'Ambiente'=>'PRODUCCION',
     ]);
 
     return [
         'ok'=>true,
-        'recipient'=>$recipient,
-        'sender'=>$sender,
+        'recipient'=>implode(', ',$to),
+        'sender'=>'sistemas@juanpablo.com.mx',
         'folio'=>$folio,
-        'attachment'=>$attachmentName,
+        'revision'=>$revision,
     ];
 }
-
 
 function ordenes_list_user_records(array $user,string $estado): array
 {
