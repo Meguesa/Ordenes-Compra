@@ -195,7 +195,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Nueva Orden | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261007-10">
+  <link rel="stylesheet" href="styles.css?v=20261012-descuento-1">
 </head>
 <body>
 <header class="tool-header">
@@ -415,6 +415,17 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
             <span><input id="aplicaRetIva" type="checkbox"> Retención IVA</span>
             <span class="percent-control"><input id="retIvaPct" type="number" min="0" max="100" step="0.01" value="0" disabled>%</span>
           </label>
+          <label class="tax-row discount-tax-row">
+            <span><input id="aplicaDescuento" type="checkbox"> Aplicar descuento</span>
+            <span class="discount-control">
+              <select id="descuentoTipo" disabled aria-label="Tipo de descuento">
+                <option value="PORCENTAJE" selected>Porcentaje</option>
+                <option value="MONTO">Monto fijo</option>
+              </select>
+              <input id="descuentoValor" type="number" min="0" step="0.01" value="0" disabled aria-label="Valor del descuento">
+              <span id="descuentoUnidad">%</span>
+            </span>
+          </label>
         </div>
 
         <div class="totals-card">
@@ -422,6 +433,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
           <div><span>IVA</span><strong id="iva">$0.00</strong></div>
           <div><span>Retención ISR</span><strong id="retIsr">$0.00</strong></div>
           <div><span>Retención IVA</span><strong id="retIva">$0.00</strong></div>
+          <div><span id="descuentoResumenLabel">Descuento</span><strong id="descuento">$0.00</strong></div>
           <div class="grand-total"><span>TOTAL</span><strong id="total">$0.00</strong></div>
         </div>
       </section>
@@ -522,6 +534,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'initialDraft' => is_array($initialDraft) ? $initialDraft : null,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261009-auth-2"></script>
+<script src="assets/js/app.js?v=20261012-descuento-1"></script>
 </body>
 </html>
