@@ -526,3 +526,37 @@ button{cursor:pointer}
   .odc-home-row{grid-template-columns:1fr}
   .odc-home-action{grid-column:auto}
 }
+
+
+/* ODC_DISCOUNT */
+.discount-tax-row{align-items:center}
+.discount-control{
+  display:grid;
+  grid-template-columns:minmax(118px,1fr) 92px auto;
+  gap:8px;
+  align-items:center;
+  min-width:min(100%,320px)
+}
+.discount-control select,
+.discount-control input{
+  min-height:38px;
+  border:1px solid #d9d0c5;
+  border-radius:8px;
+  background:#fff;
+  color:var(--jp-text);
+  font:inherit;
+  font-size:12px;
+  padding:0 10px
+}
+.discount-control input{text-align:right}
+.discount-control>span{min-width:24px;color:var(--jp-brown);font-size:12px;font-weight:800}
+.discount-control select:disabled,
+.discount-control input:disabled{background:#f1eee9;color:#9b9087}
+@media(max-width:720px){
+  .discount-tax-row{align-items:stretch}
+  .discount-control{grid-template-columns:1fr 90px auto;width:100%}
+}
+@media(max-width:460px){
+  .discount-control{grid-template-columns:1fr}
+  .discount-control>span{display:none}
+}
