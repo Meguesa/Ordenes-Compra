@@ -399,11 +399,33 @@ function ordenes_save_draft_payload(array $input, array $user): array
     $iva = round($subtotal * $ivaPct / 100, 2);
     $retIsr = round($subtotal * $retIsrPct / 100, 2);
     $retIva = round($subtotal * $retIvaPct / 100, 2);
-    $total = round($subtotal + $iva - $retIsr - $retIva, 2);
+
+    $aplicaDescuento = !empty($input['aplicaDescuento']);
+    $descuentoTipo = strtoupper(trim((string)($input['descuentoTipo'] ?? 'PORCENTAJE')));
+    if (!in_array($descuentoTipo, ['PORCENTAJE','MONTO'], true)) $descuentoTipo = 'PORCENTAJE';
+    $descuentoValor = max(0.0, ordenes_num_value($input['descuentoValor'] ?? 0));
+    if ($descuentoTipo === 'PORCENTAJE') $descuentoValor = min(100.0, $descuentoValor);
+    $descuento = 0.0;
+    if ($aplicaDescuento) {
+        $descuento = $descuentoTipo === 'MONTO'
+            ? $descuentoValor
+            : ($subtotal * $descuentoValor / 100);
+    }
+    $descuento = round(min($subtotal, max(0.0, $descuento)), 2);
+    $total = round($subtotal + $iva - $retIsr - $retIva - $descuento, 2);
 
     $itemId = (int)($input['itemId'] ?? 0);
     $folio = trim((string)($input['folio'] ?? ''));
-    $partidasJson = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $partidasPayload = [
+        'items' => $items,
+        'descuento' => [
+            'aplica' => $aplicaDescuento,
+            'tipo' => $descuentoTipo,
+            'valor' => round($descuentoValor, 2),
+            'monto' => $descuento,
+        ],
+    ];
+    $partidasJson = json_encode($partidasPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($partidasJson)) throw new RuntimeException('No fue posible serializar las partidas.');
 
     $values = [
@@ -465,6 +487,9 @@ function ordenes_save_draft_payload(array $input, array $user): array
             'iva' => $iva,
             'retIsr' => $retIsr,
             'retIva' => $retIva,
+            'descuento' => $descuento,
+            'descuentoTipo' => $descuentoTipo,
+            'descuentoValor' => round($descuentoValor, 2),
             'total' => $total,
         ],
     ];
@@ -859,10 +884,21 @@ function ordenes_item_payload(int $itemId): array
         return $field!==null?($item[$field]??null):null;
     };
     $items=[];
+    $discountMeta=['aplica'=>false,'tipo'=>'PORCENTAJE','valor'=>0.0,'monto'=>0.0];
     $raw=(string)($get('PartidasJson')??'');
     if($raw!==''){
         $decoded=json_decode($raw,true);
-        if(is_array($decoded)) $items=$decoded;
+        if(is_array($decoded)){
+            if(isset($decoded['items']) && is_array($decoded['items'])){
+                $items=$decoded['items'];
+                if(isset($decoded['descuento']) && is_array($decoded['descuento'])){
+                    $discountMeta=array_merge($discountMeta,$decoded['descuento']);
+                }
+            }else{
+                // Compatibilidad con ODC anteriores, donde PartidasJson era un arreglo simple.
+                $items=$decoded;
+            }
+        }
     }
     return [
         'itemId'=>$itemId,
@@ -886,6 +922,10 @@ function ordenes_item_payload(int $itemId): array
         'retIsr'=>(float)($get('RetencionISR')??0),
         'retIvaPct'=>(float)($get('RetIvaPct')??0),
         'retIva'=>(float)($get('RetencionIVA')??0),
+        'aplicaDescuento'=>!empty($discountMeta['aplica']),
+        'descuentoTipo'=>strtoupper((string)($discountMeta['tipo']??'PORCENTAJE')),
+        'descuentoValor'=>(float)($discountMeta['valor']??0),
+        'descuento'=>(float)($discountMeta['monto']??0),
         'total'=>(float)($get('Total')??0),
         'banco'=>(string)($get('Banco')??''),
         'cuenta'=>(string)($get('Cuenta')??''),
@@ -994,10 +1034,21 @@ function ordenes_load_user_draft(int $itemId,array $user): array
     };
 
     $items=[];
+    $discountMeta=['aplica'=>false,'tipo'=>'PORCENTAJE','valor'=>0.0,'monto'=>0.0];
     $raw=(string)($get('PartidasJson')??'');
     if($raw!==''){
         $decoded=json_decode($raw,true);
-        if(is_array($decoded)) $items=$decoded;
+        if(is_array($decoded)){
+            if(isset($decoded['items']) && is_array($decoded['items'])){
+                $items=$decoded['items'];
+                if(isset($decoded['descuento']) && is_array($decoded['descuento'])){
+                    $discountMeta=array_merge($discountMeta,$decoded['descuento']);
+                }
+            }else{
+                // Compatibilidad con ODC anteriores, donde PartidasJson era un arreglo simple.
+                $items=$decoded;
+            }
+        }
     }
 
     return [
@@ -1022,6 +1073,10 @@ function ordenes_load_user_draft(int $itemId,array $user): array
         'retIsr'=>(float)($get('RetencionISR')??0),
         'retIvaPct'=>(float)($get('RetIvaPct')??0),
         'retIva'=>(float)($get('RetencionIVA')??0),
+        'aplicaDescuento'=>!empty($discountMeta['aplica']),
+        'descuentoTipo'=>strtoupper((string)($discountMeta['tipo']??'PORCENTAJE')),
+        'descuentoValor'=>(float)($discountMeta['valor']??0),
+        'descuento'=>(float)($discountMeta['monto']??0),
         'total'=>(float)($get('Total')??0),
         'banco'=>(string)($get('Banco')??''),
         'cuenta'=>(string)($get('Cuenta')??''),
