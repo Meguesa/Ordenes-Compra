@@ -190,18 +190,30 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
     odc_pdf_text($s,$left,$bottom-89,'PUESTO:',7,false); odc_pdf_line($s,94,$bottom-92,340,$bottom-92);
     odc_pdf_text($s,$left,$bottom-110,'FIRMA:',7,false); odc_pdf_line($s,94,$bottom-113,340,$bottom-113);
 
-    $subtotal=(float)($d['subtotal']??0); $iva=(float)($d['iva']??0); $retIsr=(float)($d['retIsr']??0); $retIva=(float)($d['retIva']??0);
-    $total=(float)($d['total']??($subtotal+$iva-$retIsr-$retIva));
-    $totals=[['SUBTOTAL:',$subtotal],['I.V.A.',$iva],['retencion ISR',-$retIsr],['Retencion IVA',-$retIva],['TOTAL',$total]];
+    $subtotal=(float)($d['subtotal']??0);
+    $iva=(float)($d['iva']??0);
+    $retIsr=(float)($d['retIsr']??0);
+    $retIva=(float)($d['retIva']??0);
+    $descuento=max(0.0,(float)($d['descuento']??0));
+    $total=(float)($d['total']??($subtotal+$iva-$retIsr-$retIva-$descuento));
+    $totals=[
+        ['SUBTOTAL:',$subtotal],
+        ['I.V.A.',$iva],
+        ['retencion ISR',-$retIsr],
+        ['Retencion IVA',-$retIva],
+        ['DESCUENTO',-$descuento],
+        ['TOTAL',$total],
+    ];
+    $lastTotalIndex=count($totals)-1;
     foreach($totals as $i=>$row){
         $y=$bottom-20*($i+1);
-        if($i===4) odc_pdf_box($s,350,$y,220,20,true); else odc_pdf_line($s,350,$y,570,$y);
-        odc_pdf_text($s,420,$y+6,$row[0],7,$i===4);
+        if($i===$lastTotalIndex) odc_pdf_box($s,350,$y,220,20,true); else odc_pdf_line($s,350,$y,570,$y);
+        odc_pdf_text($s,420,$y+6,$row[0],7,$i===$lastTotalIndex);
         odc_pdf_text($s,505,$y+6,odc_pdf_money((float)$row[1],$currency),7,true);
     }
-    odc_pdf_fit_text($s,350,$bottom-122,'No. Cuenta: '.trim((string)($d['cuenta']??'')),220,7,4.2,false);
-    odc_pdf_fit_text($s,350,$bottom-137,'No. Clabe: '.trim((string)($d['clabe']??'')),220,7,4.2,false);
-    odc_pdf_fit_text($s,350,$bottom-152,'Banco: '.trim((string)($d['banco']??'')),220,7,4.2,false);
+    odc_pdf_fit_text($s,350,$bottom-142,'No. Cuenta: '.trim((string)($d['cuenta']??'')),220,7,4.2,false);
+    odc_pdf_fit_text($s,350,$bottom-157,'No. Clabe: '.trim((string)($d['clabe']??'')),220,7,4.2,false);
+    odc_pdf_fit_text($s,350,$bottom-172,'Banco: '.trim((string)($d['banco']??'')),220,7,4.2,false);
 
     $objects=[];
     $objects[1]='<< /Type /Catalog /Pages 2 0 R >>';
