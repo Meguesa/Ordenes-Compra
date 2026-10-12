@@ -85,18 +85,36 @@
     const iva = taxValue('aplicaIva', 'ivaPct', subtotal);
     const retIsr = taxValue('aplicaRetIsr', 'retIsrPct', subtotal);
     const retIva = taxValue('aplicaRetIva', 'retIvaPct', subtotal);
-    const total = subtotal + iva - retIsr - retIva;
+
+    const aplicaDescuento = $('aplicaDescuento') ? $('aplicaDescuento').checked : false;
+    const descuentoTipo = $('descuentoTipo') ? $('descuentoTipo').value : 'PORCENTAJE';
+    const descuentoValor = $('descuentoValor') ? Math.max(0, numberValue($('descuentoValor').value)) : 0;
+    let descuento = 0;
+    if (aplicaDescuento) {
+      descuento = descuentoTipo === 'MONTO'
+        ? descuentoValor
+        : subtotal * Math.min(100, descuentoValor) / 100;
+    }
+    descuento = Math.min(subtotal, Math.max(0, descuento));
+
+    const total = subtotal + iva - retIsr - retIva - descuento;
 
     $('subtotal').textContent = money(subtotal);
     $('iva').textContent = money(iva);
     $('retIsr').textContent = retIsr ? `-${money(retIsr)}` : money(0);
     $('retIva').textContent = retIva ? `-${money(retIva)}` : money(0);
+    if ($('descuento')) $('descuento').textContent = descuento ? `-${money(descuento)}` : money(0);
+    if ($('descuentoResumenLabel')) {
+      $('descuentoResumenLabel').textContent = aplicaDescuento
+        ? (descuentoTipo === 'MONTO' ? 'Descuento (monto)' : `Descuento (${descuentoValor || 0}%)`)
+        : 'Descuento';
+    }
     $('total').textContent = money(total);
     $('formStatus').textContent = subtotal > 0
       ? `Subtotal ${money(subtotal)} · Total ${money(total)}`
       : 'Captura una partida para calcular el total.';
 
-    return { items, subtotal, iva, retIsr, retIva, total };
+    return { items, subtotal, iva, retIsr, retIva, descuento, descuentoTipo, descuentoValor, total };
   }
 
   function bindTaxToggle(checkId, pctId) {
@@ -164,6 +182,9 @@
       ivaPct: $('aplicaIva').checked ? numberValue($('ivaPct').value) : 0,
       retIsrPct: $('aplicaRetIsr').checked ? numberValue($('retIsrPct').value) : 0,
       retIvaPct: $('aplicaRetIva').checked ? numberValue($('retIvaPct').value) : 0,
+      aplicaDescuento: $('aplicaDescuento') ? $('aplicaDescuento').checked : false,
+      descuentoTipo: $('descuentoTipo') ? $('descuentoTipo').value : 'PORCENTAJE',
+      descuentoValor: $('descuentoValor') ? numberValue($('descuentoValor').value) : 0,
       ...totals,
     };
   }
@@ -394,6 +415,4172 @@
       $('aplicaRetIva').checked = data.retIvaPct > 0;
       $('retIvaPct').disabled = !data.retIvaPct;
       $('retIvaPct').value = data.retIvaPct || 0;
+    }
+    if ($('aplicaDescuento')) {
+      const activeDiscount = Boolean(data.aplicaDescuento || Number(data.descuento || 0) > 0);
+      $('aplicaDescuento').checked = activeDiscount;
+      $('descuentoTipo').disabled = !activeDiscount;
+      $('descuentoValor').disabled = !activeDiscount;
+      $('descuentoTipo').value = data.descuentoTipo === 'MONTO' ? 'MONTO' : 'PORCENTAJE';
+      $('descuentoValor').value = Number(data.descuentoValor || 0);
+      $('descuentoUnidad').textContent = $('descuentoTipo').value === 'MONTO' ? (data.moneda === 'USD' ? 'US
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr><th>DESCUENTO</th><td>${d.descuento ? '-' + money(d.descuento) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+
+  if ($('aplicaDescuento')) {
+    const syncDiscountControls = () => {
+      const active = $('aplicaDescuento').checked;
+      $('descuentoTipo').disabled = !active;
+      $('descuentoValor').disabled = !active;
+      $('aplicaDescuento').closest('.tax-row').classList.toggle('active-tax', active);
+      $('descuentoUnidad').textContent = $('descuentoTipo').value === 'MONTO'
+        ? ($('moneda').value === 'USD' ? 'US
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', () => {
+    if ($('descuentoUnidad') && $('descuentoTipo')) {
+      $('descuentoUnidad').textContent = $('descuentoTipo').value === 'MONTO'
+        ? ($('moneda').value === 'USD' ? 'US
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+)
+        : '%';
+      if ($('descuentoTipo').value === 'PORCENTAJE') {
+        $('descuentoValor').max = '100';
+      } else {
+        $('descuentoValor').removeAttribute('max');
+      }
+      recalculate();
+    };
+    $('aplicaDescuento').addEventListener('change', syncDiscountControls);
+    $('descuentoTipo').addEventListener('change', syncDiscountControls);
+    $('descuentoValor').addEventListener('input', recalculate);
+  }
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+)
+        : '%';
+      if ($('descuentoTipo').value === 'PORCENTAJE') {
+        $('descuentoValor').max = '100';
+      } else {
+        $('descuentoValor').removeAttribute('max');
+      }
+      recalculate();
+    };
+    $('aplicaDescuento').addEventListener('change', syncDiscountControls);
+    $('descuentoTipo').addEventListener('change', syncDiscountControls);
+    $('descuentoValor').addEventListener('input', recalculate);
+  }
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+)
+        : '%';
+    }
+    recalculate();
+  });
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+)
+        : '%';
+      if ($('descuentoTipo').value === 'PORCENTAJE') {
+        $('descuentoValor').max = '100';
+      } else {
+        $('descuentoValor').removeAttribute('max');
+      }
+      recalculate();
+    };
+    $('aplicaDescuento').addEventListener('change', syncDiscountControls);
+    $('descuentoTipo').addEventListener('change', syncDiscountControls);
+    $('descuentoValor').addEventListener('input', recalculate);
+  }
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+ : '
+      const checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('active-tax', checkbox.checked);
+    });
+    recalculate();
+  }
+
+  function preview() {
+    const d = currentData();
+    const populatedRows = d.items.filter((x) => x.description || x.amount > 0);
+    const minimumRows = 12;
+    const rows = [...populatedRows];
+    while (rows.length < minimumRows) rows.push({ qty: '', description: '', price: '', amount: '' });
+
+    const itemRows = rows.map((x) => `
+      <tr>
+        <td class="odc-qty">${x.qty || ''}</td>
+        <td class="odc-desc">${escapeHtml(x.description || '')}</td>
+        <td class="odc-money">${x.price === '' ? '' : money(x.price)}</td>
+        <td class="odc-money">${x.amount === '' ? '' : money(x.amount)}</td>
+      </tr>`).join('');
+
+    $('previewContent').innerHTML = `
+      <div class="odc-sheet">
+        <div class="odc-top-grid">
+          <div class="odc-brandmark">
+            <img src="/mapa/assets/logo.jpg" alt="Jardines de Juan Pablo">
+          </div>
+
+          <div class="odc-title-block">
+            <div class="odc-main-title">ORDEN DE COMPRA</div>
+            <div class="odc-company-name">Jardines de Juan Pablo</div>
+            <div class="odc-company-line">RAZON SOCIAL: MEGUESA&nbsp;&nbsp;&nbsp; RFC: MEG-060608-LQ6</div>
+            <div class="odc-company-line">CALLE: CHURUBUSCO NORTE No 217&nbsp;&nbsp; COLONIA: CHURUBUSCO</div>
+            <div class="odc-company-line">MONTERREY, NL CP 64590</div>
+          </div>
+
+          <div class="odc-number-date">
+            <div class="odc-box odc-number">No&nbsp;&nbsp; ${escapeHtml(d.folio || 'PENDIENTE')}</div>
+            <div class="odc-box odc-date-label">FECHA</div>
+            <div class="odc-box odc-date-value">${formatDate(d.fecha)}</div>
+          </div>
+        </div>
+
+        <table class="odc-provider-table">
+          <colgroup>
+            <col class="odc-label-col"><col class="odc-value-col"><col class="odc-right-label-col"><col class="odc-right-value-col">
+          </colgroup>
+          <tbody>
+            <tr><th>EMPRESA:</th><td>${escapeHtml(d.proveedor || '')}</td><th></th><td></td></tr>
+            <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
+            <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
+            <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+          </tbody>
+        </table>
+
+        <table class="odc-items-table">
+          <colgroup><col class="qty"><col class="desc"><col class="unit"><col class="amount"></colgroup>
+          <thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO<br>UNITARIO</th><th>IMPORTE</th></tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div class="odc-bottom-grid">
+          <div class="odc-confirmation">
+            <div class="odc-confirm-banner">FAVOR DE CONFIRMAR RECEPCION DE OC</div>
+            <div class="odc-confirm-title">CONFIRMACION DE REQUISICION</div>
+            <div class="odc-line-field"><span>NOMBRE:</span><strong>${escapeHtml(d.user.name || 'Usuario')}</strong></div>
+            <div class="odc-line-field"><span>PUESTO:</span><strong></strong></div>
+            <div class="odc-line-field odc-signature"><span>FIRMA:</span><strong></strong></div>
+          </div>
+
+          <div class="odc-financials">
+            <table class="odc-totals-table">
+              <tbody>
+                <tr><th>SUBTOTAL:</th><td>${money(d.subtotal)}</td></tr>
+                <tr><th>I.V.A.</th><td>${money(d.iva)}</td></tr>
+                <tr><th>retención ISR</th><td>${d.retIsr ? '-' + money(d.retIsr) : money(0)}</td></tr>
+                <tr><th>Retención IVA</th><td>${d.retIva ? '-' + money(d.retIva) : money(0)}</td></tr>
+                <tr class="odc-total-row"><th>TOTAL</th><td>${money(d.total)}</td></tr>
+              </tbody>
+            </table>
+
+            <table class="odc-bank-table">
+              <tbody>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+
+    $('previewModal').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+  }
+
+  function closeModal() {
+    $('previewModal').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('btnAddItem').addEventListener('click', () => addItem());
+  $('btnDraft').addEventListener('click', saveDraft);
+  $('btnPreview').addEventListener('click', preview);
+  $('btnTestEmail').addEventListener('click', (event) => {
+    event.preventDefault();
+    if ($('btnTestEmail').dataset.sending === '1') return;
+    $('btnTestEmail').dataset.sending = '1';
+    sendTestEmail();
+  });
+  $('btnPrepareSharepoint').addEventListener('click', prepareSharepoint);
+  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('previewModal').hidden) closeModal(); });
+
+  bindTaxToggle('aplicaIva', 'ivaPct');
+  bindTaxToggle('aplicaRetIsr', 'retIsrPct');
+  bindTaxToggle('aplicaRetIva', 'retIvaPct');
+  if ($('attachments') && $('attachmentList')) {
+    $('attachments').addEventListener('change', () => {
+      const count = $('attachments').files ? $('attachments').files.length : 0;
+      $('attachmentList').textContent = count ? count + ' archivo(s) seleccionado(s).' : 'Sin archivos seleccionados.';
+      validateAttachments();
+    });
+  }
+  $('moneda').addEventListener('change', recalculate);
+  if ($('fechaPickerButton') && $('fecha')) {
+    $('fechaPickerButton').addEventListener('click', () => {
+      if (typeof $('fecha').showPicker === 'function') {
+        $('fecha').showPicker();
+      } else {
+        $('fecha').focus();
+        $('fecha').click();
+      }
+    });
+    $('fecha').addEventListener('change', () => {
+      if ($('fechaDisplay')) {
+        $('fechaDisplay').value = isoToDisplayDate($('fecha').value);
+        $('fechaDisplay').setCustomValidity('');
+      }
+    });
+  }
+
+  if ($('fechaDisplay')) {
+    $('fechaDisplay').addEventListener('input', () => {
+      let digits = $('fechaDisplay').value.replace(/\D/g, '').slice(0, 8);
+      if (digits.length > 4) digits = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) digits = digits.slice(0, 2) + '/' + digits.slice(2);
+      $('fechaDisplay').value = digits;
+      syncDateFromDisplay();
+    });
+    $('fechaDisplay').addEventListener('blur', syncDateFromDisplay);
+  }
+
+  let restored = null;
+  if (context.initialDraft && typeof context.initialDraft === 'object') {
+    restored = context.initialDraft;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('nuevo')) {
+      try { restored = JSON.parse(localStorage.getItem(draftKey()) || 'null'); } catch (_) {}
+    }
+  }
+  if (restored) populateDraft(restored); else addItem();
+
+  if (context.saveOk && context.folio) {
+    const saved = currentData();
+    saved.itemId = context.itemId;
+    saved.folio = context.folio;
+    persistLocal(saved);
+    $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = context.folio + ' guardado en BI_Ordenes_Compra como BORRADOR.';
+  } else if (context.saveError) {
+    $('formStatus').textContent = 'No se guardó en SharePoint: ' + context.saveError + '. Se conservó una copia local.';
+  }
+
+  if (context.mailOk) {
+    if (context.mailFolio) context.folio = context.mailFolio;
+    if (context.mailItemId) context.itemId = Number(context.mailItemId);
+    if (context.folio) $('folioDisplay').textContent = context.folio;
+    $('formStatus').textContent = 'ODC enviada correctamente a autorización.';
+    try { localStorage.removeItem(draftKey()); } catch (_) {}
+    window.setTimeout(() => { window.location.href = 'ordenes.php?enviado=' + encodeURIComponent(context.folio || ''); }, 900);
+  } else if (context.mailError) {
+    $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
+  }
+
+  checkSharepoint();
+})();
+) : '%';
     }
     document.querySelectorAll('.tax-row').forEach((row) => {
       const checkbox = row.querySelector('input[type="checkbox"]');
