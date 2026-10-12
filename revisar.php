@@ -65,8 +65,14 @@ $pending=strtoupper((string)$d['estado'])==='PENDIENTE_AUTORIZACION';
         <div><span>RFC</span><strong><?= htmlspecialchars((string)$d['rfc'],ENT_QUOTES,'UTF-8') ?></strong></div>
         <div><span>Condición de pago</span><strong><?= htmlspecialchars((string)$d['condicionPago'],ENT_QUOTES,'UTF-8') ?></strong></div>
         <div><span>Subtotal</span><strong>$<?= number_format((float)$d['subtotal'],2,'.',',') ?> <?= htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') ?></strong></div>
-        <div><span>Descuento</span><strong><?= (float)($d['descuento']??0)>0 ? '-
-      </div>
+        <div>
+          <span>Descuento</span>
+          <strong><?= (float)($d['descuento']??0) > 0 ? '-$'.number_format((float)$d['descuento'],2,'.',',').' '.htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') : '$0.00 '.htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') ?></strong>
+          <?php if(!empty($d['aplicaDescuento'])): ?>
+            <small><?= htmlspecialchars((string)($d['descuentoTipo']??'PORCENTAJE'),ENT_QUOTES,'UTF-8') ?><?= strtoupper((string)($d['descuentoTipo']??''))==='PORCENTAJE' ? ' · '.number_format((float)($d['descuentoValor']??0),2,'.','').'%' : '' ?></small>
+          <?php endif; ?>
+        </div>
+        <div><span>Total</span><strong>$<?= number_format((float)$d['total'],2,'.',',') ?> <?= htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') ?></strong></div>
       <div class="review-items">
         <table><thead><tr><th>Cantidad</th><th>Descripción</th><th>Precio unitario</th><th>Importe</th></tr></thead><tbody>
         <?php foreach($d['items'] as $it): ?>
