@@ -423,7 +423,11 @@
       $('descuentoValor').disabled = !activeDiscount;
       $('descuentoTipo').value = data.descuentoTipo === 'MONTO' ? 'MONTO' : 'PORCENTAJE';
       $('descuentoValor').value = Number(data.descuentoValor || 0);
-      $('descuentoUnidad').textContent = $('descuentoTipo').value === 'MONTO' ? (data.moneda === 'USD' ? 'US
+      $('descuentoUnidad').textContent = $('descuentoTipo').value === 'MONTO'
+        ? (data.moneda === 'USD' ? 'USD' : '$')
+        : '%';
+    }
+    document.querySelectorAll('.tax-row').forEach((row) => {
       const checkbox = row.querySelector('input[type="checkbox"]');
       row.classList.toggle('active-tax', checkbox.checked);
     });
