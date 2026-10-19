@@ -33,6 +33,9 @@ try {
     $listError = $error->getMessage();
 }
 
+$sentFolio = trim((string)($_GET['enviado'] ?? ''));
+if ($sentFolio !== '' && !preg_match('/^\d{4,}$/', $sentFolio)) $sentFolio = '';
+
 $view = strtolower(trim((string)($_GET['view'] ?? 'pendientes')));
 $allowedViews = ['pendientes', 'aprobadas', 'borradores'];
 if (!in_array($view, $allowedViews, true)) $view = 'pendientes';
@@ -82,7 +85,7 @@ $listSubtitle = match ($view) {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Órdenes de Compra | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261009-menu-2">
+  <link rel="stylesheet" href="styles.css?v=20261019-nav-1">
 </head>
 <body>
 <header class="tool-header">
@@ -111,6 +114,13 @@ $listSubtitle = match ($view) {
 </header>
 
 <main class="shell odc-menu-main">
+  <?php if ($sentFolio !== ''): ?>
+    <div class="records-message success odc-send-success" role="status">
+      <strong>ODC <?= htmlspecialchars($sentFolio, ENT_QUOTES, 'UTF-8') ?> enviada a autorización correctamente.</strong>
+      <span>La orden ya aparece en Órdenes pendientes y fue notificada a los autorizadores.</span>
+    </div>
+  <?php endif; ?>
+
   <section class="odc-intro-card">
     <div>
       <span class="odc-menu-pill">ÓRDENES DE COMPRA</span>
