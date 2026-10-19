@@ -65,6 +65,9 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
 }
 
 if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['form_action'] ?? '') === 'send_email') {
+    $sendWantsJson = strtolower(trim((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''))) === 'xmlhttprequest'
+        || str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json');
+
     try {
         $expected = (string)($_SESSION['ordenes_csrf'] ?? '');
         $received = (string)($_POST['csrf_token'] ?? '');
@@ -93,9 +96,15 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
             $mailPayload = json_decode($decoded, true);
             if (!is_array($mailPayload)) throw new RuntimeException('Los datos recibidos no son validos.');
 
-            $mailResult = ordenes_send_email($mailPayload, $user, is_array($_FILES['attachments'] ?? null) ? $_FILES['attachments'] : []);
+            // El nonce solo se consume despues de completar TODO el proceso.
+            // Si SharePoint o el correo fallan, el usuario puede reintentar
+            // sin recargar la pagina y sin perder los adjuntos seleccionados.
+            $mailResult = ordenes_send_email(
+                $mailPayload,
+                $user,
+                is_array($_FILES['attachments'] ?? null) ? $_FILES['attachments'] : []
+            );
 
-            // El nonce solo se consume cuando el envío completo terminó bien.
             $usedMail[$mailNonce] = time();
             if (count($usedMail) > 12) {
                 asort($usedMail);
@@ -106,6 +115,27 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
         }
     } catch (Throwable $error) {
         $mailError = $error->getMessage();
+    }
+
+    if ($sendWantsJson) {
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store');
+
+        $ok = is_array($mailResult) && !empty($mailResult['ok']) && $mailError === '';
+        $sentFolio = trim((string)($mailResult['folio'] ?? ($mailPayload['folio'] ?? '')));
+        $redirect = '/ordenes-compra/?view=pendientes';
+        if ($sentFolio !== '') $redirect .= '&enviado=' . rawurlencode($sentFolio);
+
+        if (!$ok) http_response_code(400);
+
+        echo json_encode([
+            'ok' => $ok,
+            'error' => $mailError,
+            'folio' => $sentFolio,
+            'redirect' => $redirect,
+            'mailNonce' => (string)($_SESSION['ordenes_mail_nonce'] ?? ''),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
     }
 }
 
@@ -607,6 +637,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'initialDraft' => is_array($initialDraft) ? $initialDraft : null,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261019-envio-auto-1"></script>
+<script src="assets/js/app.js?v=20261019-envio-ajax-1"></script>
 </body>
 </html>
