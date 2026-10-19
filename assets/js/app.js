@@ -410,40 +410,39 @@
       persistLocal(data);
 
       $('folioDisplay').textContent = context.folio;
-      $('formStatus').textContent = context.folio + ' guardada. Subiendo adjuntos y enviando a autorización…';
+      $('formStatus').textContent = context.folio + ' guardada. Enviando a autorización…';
+
+      $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
 
       const formData = new FormData($('odcForm'));
-      formData.set('form_action', 'ajax_send');
+      formData.set('form_action', 'send_email');
       formData.set('csrf_token', context.csrf || '');
-      formData.set('draft_payload', utf8ToBase64(JSON.stringify(data)));
-      formData.set('mail_nonce', $('mailNonce').value || '');
+      formData.set('draft_payload', $('draftPayload').value);
+      formData.set('mail_nonce', $('mailNonce').value);
 
       button.textContent = 'Enviando a autorización…';
 
-      const sendResponse = await fetch('nueva.php?action=enviar', {
+      const sendResponse = await fetch('/ordenes-compra/nueva.php', {
         method: 'POST',
         credentials: 'same-origin',
         headers: {
           'Accept': 'application/json',
-          'X-CSRF-Token': context.csrf || ''
+          'X-Requested-With': 'XMLHttpRequest'
         },
         body: formData
       });
 
       const sendResult = await sendResponse.json().catch(() => ({}));
       if (!sendResponse.ok || !sendResult.ok) {
-        throw new Error(sendResult.error || ('No fue posible enviar la ODC. HTTP ' + sendResponse.status + '.'));
+        if (sendResult.mailNonce) $('mailNonce').value = sendResult.mailNonce;
+        throw new Error(sendResult.error || 'No fue posible enviar la ODC a autorización.');
       }
 
-      if (sendResult.nextNonce && $('mailNonce')) {
-        $('mailNonce').value = String(sendResult.nextNonce);
-      }
-
-      $('formStatus').textContent = 'ODC ' + context.folio + ' enviada correctamente a autorización.';
+      if (sendResult.mailNonce) $('mailNonce').value = sendResult.mailNonce;
+      $('formStatus').textContent = 'ODC ' + (sendResult.folio || context.folio) + ' enviada a autorización correctamente.';
       try { localStorage.removeItem(draftKey()); } catch (_) {}
 
-      window.location.href = sendResult.redirect ||
-        ('/ordenes-compra/?view=pendientes&enviado=' + encodeURIComponent(context.folio));
+      window.location.href = sendResult.redirect || ('/ordenes-compra/?view=pendientes&enviado=' + encodeURIComponent(sendResult.folio || context.folio));
     } catch (error) {
       $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' +
         (error && error.message ? error.message : String(error));
