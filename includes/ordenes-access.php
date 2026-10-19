@@ -338,7 +338,7 @@ function ordenes_sharepoint_add_attachment(int $itemId,string $name,string $byte
     // El nombre se codifica para que espacios, acentos y otros caracteres no
     // rompan la llamada OData AttachmentFiles/add.
     $odataName=str_replace("'","''",$safeName);
-    $encodedName=str_replace('%27',"''",rawurlencode($odataName));
+    $encodedName=rawurlencode($odataName);
     $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles/add(FileName='".$encodedName."')";
 
     ordenes_http_raw($url,'POST',[
@@ -736,12 +736,21 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
         $original=basename((string)($attachment['name']??'archivo'));
         $stored='R'.$revision.'_'.$original;
         ordenes_sharepoint_delete_attachment($itemId,$stored);
-        ordenes_sharepoint_add_attachment(
-            $itemId,
-            $stored,
-            base64_decode((string)($attachment['contentBytes']??''),true)?:'',
-            (string)($attachment['contentType']??'application/octet-stream')
-        );
+
+        try {
+            ordenes_sharepoint_add_attachment(
+                $itemId,
+                $stored,
+                base64_decode((string)($attachment['contentBytes']??''),true)?:'',
+                (string)($attachment['contentType']??'application/octet-stream')
+            );
+        } catch (Throwable $attachmentError) {
+            throw new RuntimeException(
+                'No fue posible adjuntar "'.$original.'" en SharePoint: '.$attachmentError->getMessage(),
+                0,
+                $attachmentError
+            );
+        }
     }
 
     $history=ordenes_history_array($item);
