@@ -345,43 +345,85 @@
     return errors.length === 0;
   }
 
-  function sendTestEmail() {
+  async function sendTestEmail() {
+    const button = $('btnTestEmail');
+    const originalText = button.textContent;
+
+    const resetButton = () => {
+      button.disabled = false;
+      button.textContent = originalText;
+      button.dataset.sending = '0';
+    };
+
     if (!validateAttachments()) {
       $('attachments').reportValidity();
-      $('btnTestEmail').dataset.sending = '0';
+      resetButton();
       return;
     }
+
     if (!syncDateFromDisplay()) {
       $('fechaDisplay').reportValidity();
-      $('btnTestEmail').dataset.sending = '0';
+      resetButton();
       return;
     }
-    const data = currentData();
+
+    let data = currentData();
     persistLocal(data);
 
     if (context.prototype) {
       $('formStatus').textContent = 'La autorización solo puede enviarse desde el Portal publicado.';
+      resetButton();
       return;
     }
 
-    if (!context.folio || !context.itemId) {
-      $('formStatus').textContent = 'Guarda primero el borrador para obtener un folio antes de enviarlo a autorización.';
-      return;
-    }
-
-    data.itemId = Number(context.itemId);
-    data.folio = String(context.folio);
-
-    $('formStatus').textContent = 'Guardando documentos y enviando ODC a autorización…';
-    $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
-
-    const actionInput = $('odcForm').querySelector('input[name="form_action"]');
-    actionInput.value = 'send_email';
-
-    const button = $('btnTestEmail');
     button.disabled = true;
-    button.textContent = 'Enviando a autorización…';
-    $('odcForm').submit();
+    button.textContent = 'Guardando y enviando…';
+    $('formStatus').textContent = 'Guardando la ODC en SharePoint…';
+
+    try {
+      const saveResponse = await fetch('nueva.php?action=guardar', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-Token': context.csrf || ''
+        },
+        body: JSON.stringify(data)
+      });
+
+      const saveResult = await saveResponse.json().catch(() => ({}));
+      if (!saveResponse.ok || !saveResult.ok) {
+        throw new Error(saveResult.error || 'No fue posible guardar la ODC antes de enviarla.');
+      }
+
+      context.itemId = Number(saveResult.itemId || 0);
+      context.folio = String(saveResult.folio || '');
+
+      if (!context.itemId || !context.folio) {
+        throw new Error('SharePoint guardó la ODC, pero no devolvió un folio válido.');
+      }
+
+      data = currentData();
+      data.itemId = context.itemId;
+      data.folio = context.folio;
+      persistLocal(data);
+
+      $('folioDisplay').textContent = context.folio;
+      $('formStatus').textContent = context.folio + ' guardada. Enviando a autorización…';
+
+      $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
+
+      const actionInput = $('odcForm').querySelector('input[name="form_action"]');
+      actionInput.value = 'send_email';
+
+      button.textContent = 'Enviando a autorización…';
+      $('odcForm').submit();
+    } catch (error) {
+      $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' +
+        (error && error.message ? error.message : String(error));
+      resetButton();
+    }
   }
 
   function populateDraft(data) {
