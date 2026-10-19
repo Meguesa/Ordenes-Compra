@@ -108,6 +108,14 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
     }
 }
 
+if (!$prototypeMode && is_array($mailResult) && !empty($mailResult['ok']) && $mailError === '') {
+    $sentFolio = trim((string)($mailResult['folio'] ?? ($mailPayload['folio'] ?? '')));
+    $target = '/ordenes-compra/?view=pendientes';
+    if ($sentFolio !== '') $target .= '&enviado=' . rawurlencode($sentFolio);
+    header('Location: ' . $target, true, 303);
+    exit;
+}
+
 if (!$prototypeMode && isset($_GET['action'])) {
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store');
@@ -195,9 +203,9 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Nueva Orden | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261012-descuento-1">
+  <link rel="stylesheet" href="styles.css?v=20261019-nav-1">
 </head>
-<body>
+<body class="odc-new-page">
 <header class="tool-header">
   <div class="shell tool-header-inner">
     <div class="tool-brand">
@@ -211,7 +219,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
     <div class="tool-header-context">Captura y generación de órdenes de compra</div>
 
     <div class="tool-header-actions">
-      <a class="header-action" href="/ordenes-compra/">Regresar a Órdenes</a>
+      <a class="header-action mobile-back-action" href="/ordenes-compra/" aria-label="Regresar a Órdenes">← Órdenes</a>
       <details class="account-menu">
         <summary class="account-trigger" aria-label="Abrir menú de usuario" title="<?= $name ?>">
           <svg viewBox="0 0 24 24" aria-hidden="true">
