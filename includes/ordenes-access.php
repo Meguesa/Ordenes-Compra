@@ -80,20 +80,34 @@ function ordenes_http_raw(string $url,string $method,array $headers,string $body
     curl_setopt_array($ch,[
         CURLOPT_RETURNTRANSFER=>true,
         CURLOPT_FOLLOWLOCATION=>true,
-        CURLOPT_CONNECTTIMEOUT=>8,
-        CURLOPT_TIMEOUT=>40,
+        CURLOPT_CONNECTTIMEOUT=>12,
+        CURLOPT_TIMEOUT=>60,
         CURLOPT_CUSTOMREQUEST=>$method,
         CURLOPT_HTTPHEADER=>$headers,
         CURLOPT_POSTFIELDS=>$body,
         CURLOPT_SSL_VERIFYPEER=>true,
         CURLOPT_SSL_VERIFYHOST=>2,
     ]);
+    if(defined('CURLOPT_IPRESOLVE') && defined('CURL_IPRESOLVE_V4')) {
+        curl_setopt($ch,CURLOPT_IPRESOLVE,CURL_IPRESOLVE_V4);
+    }
     $raw=curl_exec($ch);
     $status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
     $error=curl_error($ch);
     curl_close($ch);
     if($raw===false) throw new RuntimeException('Solicitud remota fallida: '.$error);
-    if($status<200 || $status>=300) throw new RuntimeException('SharePoint respondio HTTP '.$status.'.');
+    if($status<200 || $status>=300) {
+        $detail='';
+        $decoded=json_decode((string)$raw,true);
+        if(is_array($decoded)) {
+            $detail=trim((string)($decoded['error']['message']['value'] ?? $decoded['error']['message'] ?? $decoded['error_description'] ?? ''));
+        }
+        if($detail==='' && trim((string)$raw)!=='') {
+            $detail=trim(strip_tags((string)$raw));
+            if(strlen($detail)>500) $detail=substr($detail,0,500);
+        }
+        throw new RuntimeException('SharePoint respondio HTTP '.$status.($detail!==''?': '.$detail:'.'));
+    }
     return (string)$raw;
 }
 
@@ -317,12 +331,21 @@ function ordenes_sharepoint_add_attachment(int $itemId,string $name,string $byte
     if($itemId<=0) throw new InvalidArgumentException('ID invalido.');
     $safeName=basename(trim($name));
     if($safeName==='') throw new InvalidArgumentException('Nombre de archivo invalido.');
+    if($bytes==='') throw new InvalidArgumentException('El archivo adjunto esta vacio.');
+
     $s=ordenes_session();
-    $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles/add(FileName='".str_replace("'","''",$safeName)."')";
+
+    // El nombre se codifica para que espacios, acentos y otros caracteres no
+    // rompan la llamada OData AttachmentFiles/add.
+    $odataName=str_replace("'","''",$safeName);
+    $encodedName=str_replace('%27',"''",rawurlencode($odataName));
+    $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles/add(FileName='".$encodedName."')";
+
     ordenes_http_raw($url,'POST',[
         'Authorization: Bearer '.$s['token'],
         'Accept: application/json;odata=nometadata',
-        'Content-Type: '.$mime,
+        'Content-Type: application/octet-stream',
+        'Content-Length: '.strlen($bytes),
     ],$bytes);
 }
 
