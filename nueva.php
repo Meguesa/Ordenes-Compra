@@ -87,14 +87,6 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
                 throw new RuntimeException('La solicitud de correo ya expiro. Recarga la pagina antes de volver a enviarla.');
             }
 
-            $usedMail[$mailNonce] = time();
-            if (count($usedMail) > 12) {
-                asort($usedMail);
-                $usedMail = array_slice($usedMail, -12, null, true);
-            }
-            $_SESSION['ordenes_mail_used'] = $usedMail;
-            $_SESSION['ordenes_mail_nonce'] = bin2hex(random_bytes(24));
-
             $encoded = trim((string)($_POST['draft_payload'] ?? ''));
             $decoded = base64_decode($encoded, true);
             if ($decoded === false || $decoded === '') throw new RuntimeException('No fue posible leer los datos de la ODC.');
@@ -102,6 +94,15 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
             if (!is_array($mailPayload)) throw new RuntimeException('Los datos recibidos no son validos.');
 
             $mailResult = ordenes_send_email($mailPayload, $user, is_array($_FILES['attachments'] ?? null) ? $_FILES['attachments'] : []);
+
+            // El nonce solo se consume cuando el envío completo terminó bien.
+            $usedMail[$mailNonce] = time();
+            if (count($usedMail) > 12) {
+                asort($usedMail);
+                $usedMail = array_slice($usedMail, -12, null, true);
+            }
+            $_SESSION['ordenes_mail_used'] = $usedMail;
+            $_SESSION['ordenes_mail_nonce'] = bin2hex(random_bytes(24));
         }
     } catch (Throwable $error) {
         $mailError = $error->getMessage();
@@ -155,6 +156,70 @@ if (!$prototypeMode && isset($_GET['action'])) {
                 'created' => $result['created'],
                 'errors' => $result['errors'],
                 'missing' => $result['missing'],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        if ($action === 'enviar') {
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+                throw new RuntimeException('Metodo no permitido.');
+            }
+
+            $expected = (string)($_SESSION['ordenes_csrf'] ?? '');
+            $received = trim((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? '')));
+            if ($expected === '' || $received === '' || !hash_equals($expected, $received)) {
+                throw new RuntimeException('La sesion de seguridad no es valida. Recarga la pagina.');
+            }
+
+            $encoded = trim((string)($_POST['draft_payload'] ?? ''));
+            $decoded = base64_decode($encoded, true);
+            if ($decoded === false || $decoded === '') {
+                throw new RuntimeException('No fue posible leer los datos de la ODC.');
+            }
+
+            $payload = json_decode($decoded, true);
+            if (!is_array($payload)) {
+                throw new RuntimeException('Los datos recibidos no son validos.');
+            }
+
+            $mailNonce = trim((string)($_POST['mail_nonce'] ?? ''));
+            $currentMailNonce = (string)($_SESSION['ordenes_mail_nonce'] ?? '');
+            $usedMail = is_array($_SESSION['ordenes_mail_used'] ?? null) ? $_SESSION['ordenes_mail_used'] : [];
+
+            if ($mailNonce !== '' && isset($usedMail[$mailNonce])) {
+                echo json_encode([
+                    'ok' => true,
+                    'duplicate' => true,
+                    'folio' => (string)($payload['folio'] ?? ''),
+                    'itemId' => (int)($payload['itemId'] ?? 0),
+                    'redirect' => '/ordenes-compra/?view=pendientes&enviado=' . rawurlencode((string)($payload['folio'] ?? '')),
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                exit;
+            }
+
+            if ($mailNonce === '' || $currentMailNonce === '' || !hash_equals($currentMailNonce, $mailNonce)) {
+                throw new RuntimeException('La solicitud de envio expiro. Recarga la pagina antes de volver a enviarla.');
+            }
+
+            $result = ordenes_send_email(
+                $payload,
+                $user,
+                is_array($_FILES['attachments'] ?? null) ? $_FILES['attachments'] : []
+            );
+
+            $usedMail[$mailNonce] = time();
+            if (count($usedMail) > 12) {
+                asort($usedMail);
+                $usedMail = array_slice($usedMail, -12, null, true);
+            }
+            $_SESSION['ordenes_mail_used'] = $usedMail;
+            $_SESSION['ordenes_mail_nonce'] = bin2hex(random_bytes(24));
+
+            $folio = trim((string)($result['folio'] ?? ($payload['folio'] ?? '')));
+            echo json_encode($result + [
+                'itemId' => (int)($payload['itemId'] ?? 0),
+                'redirect' => '/ordenes-compra/?view=pendientes&enviado=' . rawurlencode($folio),
+                'nextNonce' => (string)$_SESSION['ordenes_mail_nonce'],
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             exit;
         }
