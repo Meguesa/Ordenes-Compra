@@ -534,6 +534,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'initialDraft' => is_array($initialDraft) ? $initialDraft : null,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261012-descuento-1"></script>
+<script src="assets/js/app.js?v=20261019-envio-auto-1"></script>
 </body>
 </html>
