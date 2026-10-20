@@ -73,52 +73,6 @@ $pending=strtoupper((string)$d['estado'])==='PENDIENTE_AUTORIZACION';
           <?php endif; ?>
         </div>
         <div><span>Total</span><strong>$<?= number_format((float)$d['total'],2,'.',',') ?> <?= htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') ?></strong></div>
-      <div class="review-items">
-        <table><thead><tr><th>Cantidad</th><th>Descripción</th><th>Precio unitario</th><th>Importe</th></tr></thead><tbody>
-        <?php foreach($d['items'] as $it): ?>
-          <tr><td><?= htmlspecialchars((string)($it['qty']??''),ENT_QUOTES,'UTF-8') ?></td><td><?= htmlspecialchars((string)($it['description']??''),ENT_QUOTES,'UTF-8') ?></td><td>$<?= number_format((float)($it['price']??0),2,'.',',') ?></td><td>$<?= number_format((float)($it['amount']??0),2,'.',',') ?></td></tr>
-        <?php endforeach; ?>
-        </tbody></table>
-      </div>
-    </article>
-
-    <aside class="records-panel">
-      <div class="records-panel-heading"><div><h2>Adjuntos</h2><p>Documentos enviados por el solicitante.</p></div></div>
-      <?php if(!$attachments): ?><div class="records-empty compact">Sin archivos adjuntos.</div>
-      <?php else: ?><div class="review-attachments"><?php foreach($attachments as $a): ?>
-        <a href="adjunto.php?id=<?= $id ?>&file=<?= rawurlencode((string)($a['FileName']??'')) ?>"><?= htmlspecialchars((string)($a['FileName']??'Archivo'),ENT_QUOTES,'UTF-8') ?></a>
-      <?php endforeach; ?></div><?php endif; ?>
-    </aside>
-  </section>
-
-  <section class="records-panel review-history-panel">
-    <div class="records-panel-heading"><div><h2>Historial y comentarios</h2><p>Seguimiento de todas las revisiones de la ODC.</p></div></div>
-    <?php if(!$d['historial']): ?><div class="records-empty compact">Sin movimientos registrados.</div>
-    <?php else: ?><div class="approval-timeline"><?php foreach($d['historial'] as $ev): if(!is_array($ev)) continue; ?>
-      <div class="timeline-event"><strong><?= htmlspecialchars((string)($ev['accion']??''),ENT_QUOTES,'UTF-8') ?></strong><span>R<?= (int)($ev['revision']??0) ?> · <?= htmlspecialchars((string)($ev['usuario']??$ev['correo']??''),ENT_QUOTES,'UTF-8') ?></span><?php if(trim((string)($ev['comentario']??''))!==''): ?><p><?= nl2br(htmlspecialchars((string)$ev['comentario'],ENT_QUOTES,'UTF-8')) ?></p><?php endif; ?></div>
-    <?php endforeach; ?></div><?php endif; ?>
-  </section>
-
-  <section class="records-panel decision-panel">
-    <div class="records-panel-heading"><div><h2>Decisión</h2><p>El rechazo requiere un comentario. Puedes guardar un comentario sin cerrar la solicitud.</p></div></div>
-    <?php if($pending): ?>
-    <form method="post" action="revisar.php?id=<?= $id ?>" class="decision-form">
-      <input type="hidden" name="id" value="<?= $id ?>">
-      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)$_SESSION['ordenes_auth_csrf'],ENT_QUOTES,'UTF-8') ?>">
-      <label>Comentario de revisión
-        <textarea name="comentario" rows="5" placeholder="Escribe observaciones para el solicitante..."></textarea>
-      </label>
-      <div class="decision-actions">
-        <button class="secondary-button" type="submit" name="decision" value="COMENTARIO">Guardar comentario</button>
-        <button class="danger-button" type="submit" name="decision" value="RECHAZAR">Rechazar</button>
-        <button class="approve-button" type="submit" name="decision" value="APROBAR">Aprobar</button>
-      </div>
-    </form>
-    <?php else: ?><div class="records-empty compact">Esta revisión ya fue resuelta: <?= htmlspecialchars((string)$d['estado'],ENT_QUOTES,'UTF-8') ?>.</div><?php endif; ?>
-  </section>
-</main>
-</body></html>.number_format((float)$d['descuento'],2,'.',',').' '.htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') : '$0.00 '.htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') ?></strong><?php if(!empty($d['aplicaDescuento'])): ?><small><?= htmlspecialchars((string)($d['descuentoTipo']??'PORCENTAJE'),ENT_QUOTES,'UTF-8') ?><?= strtoupper((string)($d['descuentoTipo']??''))==='PORCENTAJE' ? ' · '.number_format((float)($d['descuentoValor']??0),2,'.','').'%' : '' ?></small><?php endif; ?></div>
-        <div><span>Total</span><strong>$<?= number_format((float)$d['total'],2,'.',',') ?> <?= htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') ?></strong></div>
       </div>
       <div class="review-items">
         <table><thead><tr><th>Cantidad</th><th>Descripción</th><th>Precio unitario</th><th>Importe</th></tr></thead><tbody>
