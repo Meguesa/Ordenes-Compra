@@ -584,7 +584,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
       <label class="attachment-upload">
         <span>Documentos e imágenes</span>
         <input id="attachments" name="attachments[]" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
-        <small>Hasta 5 archivos · máximo combinado 2.5 MB.</small>
+        <small>Hasta 5 archivos · máximo 10 MB por archivo.</small>
       </label>
       <div id="attachmentList" class="attachment-list">Sin archivos seleccionados.</div>
     </section>
