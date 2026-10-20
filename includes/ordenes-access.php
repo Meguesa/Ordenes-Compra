@@ -766,15 +766,709 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $proveedor=trim((string)($input['proveedor']??''));
     $moneda=strtoupper(trim((string)($input['moneda']??'MXN')));
     $total=(float)($input['total']??0);
-    $totalText=($moneda==='USD'?'US$':'$').number_format($total,2,'.',',');
+    $totalText=($moneda==='USD'?'US
+
+    $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
+    $emailAttachments=[[
+        '@odata.type'=>'#microsoft.graph.fileAttachment',
+        'name'=>'ODC_'.$folio.'.pdf',
+        'contentType'=>'application/pdf',
+        'contentBytes'=>base64_encode($pdf),
+    ]];
+    $emailAttachments=array_merge($emailAttachments,$uploaded);
+
+    $to=ordenes_approver_emails();
+    $cc=array_values(array_filter([$requesterEmail,'jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx']));
+    ordenes_send_message('AUTORIZACION ODC '.$folio.' | '.$proveedor,$html,$to,$cc,$emailAttachments);
+
+    ordenes_update_item($itemId,[
+        'Estado'=>'PENDIENTE_AUTORIZACION',
+        'Revision'=>$revision,
+        'HistorialAutorizacion'=>json_encode($history,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+        'UltimoComentario'=>trim((string)($input['observaciones']??'')),
+        'UltimaRevisionPor'=>'',
+        'UltimaRevisionCorreo'=>'',
+        'FechaEnvioAutorizacion'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s'),
+        'FechaResolucion'=>null,
+        'Ambiente'=>'PRODUCCION',
+    ]);
+
+    return [
+        'ok'=>true,
+        'recipient'=>implode(', ',$to),
+        'sender'=>'sistemas@juanpablo.com.mx',
+        'folio'=>$folio,
+        'revision'=>$revision,
+    ];
+}
+
+function ordenes_list_user_records(array $user,string $estado): array
+{
+    $email=strtolower(trim((string)($user['email']??'')));
+    if($email==='') throw new RuntimeException('La sesion no contiene correo electronico.');
+
+    $estado=strtoupper(trim($estado));
+    if(!in_array($estado,['BORRADOR','RECHAZADA','PENDIENTE_AUTORIZACION','APROBADA','ENVIADA'],true)) throw new InvalidArgumentException('Estado de ODC no valido.');
+
+    $emailField=ordenes_field('SolicitanteCorreo');
+    $estadoField=ordenes_field('Estado');
+    if($emailField===null || $estadoField===null) throw new RuntimeException('No fue posible resolver los campos de consulta de Ordenes de Compra.');
+
+    $canonical=['Folio','Fecha','Proveedor','Total','Estado','SolicitanteCorreo','SolicitanteNombre','Revision','UltimoComentario'];
+    $resolved=['Id'];
+    $fieldMap=[];
+    foreach($canonical as $name){
+        $field=ordenes_field($name);
+        if($field!==null){
+            $resolved[]=$field;
+            $fieldMap[$name]=$field;
+        }
+    }
+
+    $filter=$emailField." eq '".str_replace("'","''",$email)."' and ".$estadoField." eq '".$estado."'";
+    $query=http_build_query([
+        '$select'=>implode(',',array_values(array_unique($resolved))),
+        '$filter'=>$filter,
+        '$orderby'=>'Id desc',
+        '$top'=>'100',
+    ],'','&',PHP_QUERY_RFC3986);
+
+    $s=ordenes_session();
+    $data=ordenes_http_json(ordenes_list_base().'/items?'.$query,'GET',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+    ]);
+
+    $out=[];
+    foreach(($data['value']??[]) as $row){
+        if(!is_array($row)) continue;
+        $record=['id'=>(int)($row['Id']??0)];
+        foreach($fieldMap as $canonicalName=>$internalName){
+            $record[$canonicalName]=$row[$internalName]??null;
+        }
+        $out[]=$record;
+    }
+    return $out;
+}
+
+function ordenes_sp_graph_attachments(int $itemId): array
+{
+    $out=[];
+    foreach(ordenes_sharepoint_attachments($itemId) as $meta){
+        $name=(string)($meta['FileName']??'archivo');
+        $url=(string)($meta['ServerRelativeUrl']??'');
+        if($url==='') continue;
+        $out[]=[
+            '@odata.type'=>'#microsoft.graph.fileAttachment',
+            'name'=>$name,
+            'contentType'=>'application/octet-stream',
+            'contentBytes'=>base64_encode(ordenes_sharepoint_attachment_bytes($url)),
+        ];
+    }
+    return $out;
+}
+
+function ordenes_list_inbox_records(): array
+{
+    $stateField=ordenes_field('Estado');
+    if($stateField===null) throw new RuntimeException('No fue posible resolver el estado de las ODC.');
+    $canonical=['Folio','Fecha','Proveedor','Total','Estado','SolicitanteNombre','SolicitanteCorreo','Revision'];
+    $resolved=['Id']; $fieldMap=[];
+    foreach($canonical as $name){
+        $field=ordenes_field($name);
+        if($field!==null){ $resolved[]=$field; $fieldMap[$name]=$field; }
+    }
+    $query=http_build_query([
+        '$select'=>implode(',',array_values(array_unique($resolved))),
+        '$filter'=>$stateField." eq 'PENDIENTE_AUTORIZACION'",
+        '$orderby'=>'Id desc',
+        '$top'=>'100',
+    ],'','&',PHP_QUERY_RFC3986);
+    $s=ordenes_session();
+    $data=ordenes_http_json(ordenes_list_base().'/items?'.$query,'GET',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+    ]);
+    $out=[];
+    foreach(($data['value']??[]) as $row){
+        if(!is_array($row)) continue;
+        $record=['id'=>(int)($row['Id']??0)];
+        foreach($fieldMap as $canonicalName=>$internalName) $record[$canonicalName]=$row[$internalName]??null;
+        $out[]=$record;
+    }
+    return $out;
+}
+
+function ordenes_item_payload(int $itemId): array
+{
+    $item=ordenes_get_item($itemId);
+    $get=static function(string $name) use ($item): mixed {
+        $field=ordenes_field($name);
+        return $field!==null?($item[$field]??null):null;
+    };
+    $items=[];
+    $discountMeta=['aplica'=>false,'tipo'=>'PORCENTAJE','valor'=>0.0,'monto'=>0.0];
+    $raw=(string)($get('PartidasJson')??'');
+    if($raw!==''){
+        $decoded=json_decode($raw,true);
+        if(is_array($decoded)){
+            if(isset($decoded['items']) && is_array($decoded['items'])){
+                $items=$decoded['items'];
+                if(isset($decoded['descuento']) && is_array($decoded['descuento'])){
+                    $discountMeta=array_merge($discountMeta,$decoded['descuento']);
+                }
+            }else{
+                // Compatibilidad con ODC anteriores, donde PartidasJson era un arreglo simple.
+                $items=$decoded;
+            }
+        }
+    }
+    return [
+        'itemId'=>$itemId,
+        'folio'=>(string)($get('Folio')??''),
+        'fecha'=>substr((string)($get('Fecha')??''),0,10),
+        'empresaCompradora'=>(string)($get('EmpresaCompradora')??'MEGUESA'),
+        'proveedor'=>(string)($get('Proveedor')??''),
+        'domicilio'=>(string)($get('Domicilio')??''),
+        'rfc'=>(string)($get('RFC')??''),
+        'telefono'=>(string)($get('Telefono')??''),
+        'ciudadEstado'=>(string)($get('CiudadEstado')??''),
+        'condicionPago'=>(string)($get('CondicionPago')??''),
+        'tiempoEntrega'=>(string)($get('TiempoEntrega')??''),
+        'moneda'=>(string)($get('Moneda')??'MXN'),
+        'tipoCambio'=>(float)($get('TipoCambio')??1),
+        'items'=>$items,
+        'subtotal'=>(float)($get('Subtotal')??0),
+        'ivaPct'=>(float)($get('IvaPct')??0),
+        'iva'=>(float)($get('IVA')??0),
+        'retIsrPct'=>(float)($get('RetIsrPct')??0),
+        'retIsr'=>(float)($get('RetencionISR')??0),
+        'retIvaPct'=>(float)($get('RetIvaPct')??0),
+        'retIva'=>(float)($get('RetencionIVA')??0),
+        'aplicaDescuento'=>!empty($discountMeta['aplica']),
+        'descuentoTipo'=>strtoupper((string)($discountMeta['tipo']??'PORCENTAJE')),
+        'descuentoValor'=>(float)($discountMeta['valor']??0),
+        'descuento'=>(float)($discountMeta['monto']??0),
+        'total'=>(float)($get('Total')??0),
+        'banco'=>(string)($get('Banco')??''),
+        'cuenta'=>(string)($get('Cuenta')??''),
+        'clabe'=>(string)($get('CLABE')??''),
+        'solicitanteNombre'=>(string)($get('SolicitanteNombre')??''),
+        'solicitanteCorreo'=>(string)($get('SolicitanteCorreo')??''),
+        'estado'=>(string)($get('Estado')??''),
+        'revision'=>(int)($get('Revision')??0),
+        'ultimoComentario'=>(string)($get('UltimoComentario')??''),
+        'historial'=>ordenes_history_array($item),
+    ];
+}
+
+function ordenes_process_authorization(int $itemId,array $user,string $action,string $comment=''): array
+{
+    ordenes_ensure_approval_schema();
+    if(!ordenes_user_is_approver($user)) throw new RuntimeException('Tu cuenta no puede autorizar ordenes.');
+
+    $action=strtoupper(trim($action));
+    if(!in_array($action,['COMENTARIO','APROBAR','RECHAZAR'],true)) throw new InvalidArgumentException('Accion no valida.');
+    $comment=trim($comment);
+    if($action==='RECHAZAR' && $comment==='') throw new RuntimeException('El comentario es obligatorio para rechazar una ODC.');
+
+    $payload=ordenes_item_payload($itemId);
+    if(strtoupper($payload['estado'])!=='PENDIENTE_AUTORIZACION') throw new RuntimeException('Esta ODC ya no esta pendiente de autorizacion.');
+
+    $item=ordenes_get_item($itemId);
+    $history=ordenes_history_array($item);
+    $reviewerName=trim((string)($user['name']??'Autorizador'));
+    $reviewerEmail=strtolower(trim((string)($user['email']??'')));
+    $eventAction=$action==='COMENTARIO'?'COMENTARIO':($action==='APROBAR'?'APROBADA':'RECHAZADA');
+    $history[]=[
+        'fecha'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format(DATE_ATOM),
+        'revision'=>(int)$payload['revision'],
+        'accion'=>$eventAction,
+        'usuario'=>$reviewerName,
+        'correo'=>$reviewerEmail,
+        'comentario'=>$comment,
+    ];
+
+    $requester=(string)$payload['solicitanteCorreo'];
+    $folio=(string)$payload['folio'];
+    $provider=(string)$payload['proveedor'];
+    $reviewUrl='https://portal.juanpablo.com.mx/ordenes-compra/revisar.php?id='.$itemId;
+    $body='<h2>ODC '.$folio.' - '.$eventAction.'</h2>'
+        .'<p>Proveedor: '.htmlspecialchars($provider,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</p>'
+        .'<p>Revision: R'.(int)$payload['revision'].'</p>'
+        .'<p>Revisado por: '.htmlspecialchars($reviewerName,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</p>'
+        .'<p>Comentarios: '.nl2br(htmlspecialchars(($allComments=implode("\n\n",array_values(array_filter(array_map(static fn($ev)=>is_array($ev)?trim((string)($ev['comentario']??'')):'',$history)))))!==''?$allComments:'Sin comentarios.',ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8')).'</p>'
+        .'<p><a href="'.htmlspecialchars($reviewUrl,ENT_QUOTES,'UTF-8').'">Abrir ODC</a></p>';
+
+    $to=$action==='RECHAZAR'?[$requester]:array_values(array_unique(array_merge([$requester],ordenes_approver_emails())));
+    $cc=['jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx'];
+    if($action==='RECHAZAR') $cc=array_merge(ordenes_approver_emails(),$cc);
+
+    $attachments=[];
+    if($action!=='COMENTARIO'){
+        $pdf=odc_pdf_generate($payload,['name'=>$payload['solicitanteNombre'],'email'=>$requester],(string)($_SERVER['DOCUMENT_ROOT']??''));
+        $attachments[]=[
+            '@odata.type'=>'#microsoft.graph.fileAttachment',
+            'name'=>'ODC_'.$folio.'.pdf',
+            'contentType'=>'application/pdf',
+            'contentBytes'=>base64_encode($pdf),
+        ];
+        $attachments=array_merge($attachments,ordenes_sp_graph_attachments($itemId));
+    }
+
+    ordenes_send_message($eventAction.' ODC '.$folio.' | '.$provider,$body,$to,$cc,$attachments);
+
+    $values=[
+        'HistorialAutorizacion'=>json_encode($history,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+        'UltimoComentario'=>$comment,
+        'UltimaRevisionPor'=>$reviewerName,
+        'UltimaRevisionCorreo'=>$reviewerEmail,
+    ];
+    if($action==='APROBAR'){
+        $values['Estado']='APROBADA';
+        $values['FechaResolucion']=(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s');
+    }elseif($action==='RECHAZAR'){
+        $values['Estado']='RECHAZADA';
+        $values['FechaResolucion']=(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s');
+    }
+    ordenes_update_item($itemId,$values);
+
+    return ['ok'=>true,'action'=>$eventAction,'folio'=>$folio];
+}
+
+function ordenes_load_user_draft(int $itemId,array $user): array
+{
+    if($itemId<=0) throw new InvalidArgumentException('Borrador invalido.');
+    $email=strtolower(trim((string)($user['email']??'')));
+    if($email==='') throw new RuntimeException('La sesion no contiene correo electronico.');
+
+    $item=ordenes_get_item($itemId);
+    $ownerField=ordenes_field('SolicitanteCorreo');
+    $stateField=ordenes_field('Estado');
+    $owner=$ownerField!==null?strtolower(trim((string)($item[$ownerField]??''))):'';
+    $state=$stateField!==null?strtoupper(trim((string)($item[$stateField]??''))):'';
+
+    if($owner!==$email) throw new RuntimeException('No tienes permiso para abrir este borrador.');
+    if(!in_array($state,['BORRADOR','RECHAZADA'],true)) throw new RuntimeException('La orden seleccionada no esta disponible para correccion.');
+
+    $get=static function(string $name) use ($item): mixed {
+        $field=ordenes_field($name);
+        return $field!==null?($item[$field]??null):null;
+    };
+
+    $items=[];
+    $discountMeta=['aplica'=>false,'tipo'=>'PORCENTAJE','valor'=>0.0,'monto'=>0.0];
+    $raw=(string)($get('PartidasJson')??'');
+    if($raw!==''){
+        $decoded=json_decode($raw,true);
+        if(is_array($decoded)){
+            if(isset($decoded['items']) && is_array($decoded['items'])){
+                $items=$decoded['items'];
+                if(isset($decoded['descuento']) && is_array($decoded['descuento'])){
+                    $discountMeta=array_merge($discountMeta,$decoded['descuento']);
+                }
+            }else{
+                // Compatibilidad con ODC anteriores, donde PartidasJson era un arreglo simple.
+                $items=$decoded;
+            }
+        }
+    }
+
+    return [
+        'itemId'=>$itemId,
+        'folio'=>(string)($get('Folio')??''),
+        'fecha'=>substr((string)($get('Fecha')??''),0,10),
+        'empresaCompradora'=>(string)($get('EmpresaCompradora')??'MEGUESA'),
+        'proveedor'=>(string)($get('Proveedor')??''),
+        'domicilio'=>(string)($get('Domicilio')??''),
+        'rfc'=>(string)($get('RFC')??''),
+        'telefono'=>(string)($get('Telefono')??''),
+        'ciudadEstado'=>(string)($get('CiudadEstado')??''),
+        'condicionPago'=>(string)($get('CondicionPago')??''),
+        'tiempoEntrega'=>(string)($get('TiempoEntrega')??''),
+        'moneda'=>(string)($get('Moneda')??'MXN'),
+        'tipoCambio'=>(float)($get('TipoCambio')??1),
+        'items'=>$items,
+        'subtotal'=>(float)($get('Subtotal')??0),
+        'ivaPct'=>(float)($get('IvaPct')??0),
+        'iva'=>(float)($get('IVA')??0),
+        'retIsrPct'=>(float)($get('RetIsrPct')??0),
+        'retIsr'=>(float)($get('RetencionISR')??0),
+        'retIvaPct'=>(float)($get('RetIvaPct')??0),
+        'retIva'=>(float)($get('RetencionIVA')??0),
+        'aplicaDescuento'=>!empty($discountMeta['aplica']),
+        'descuentoTipo'=>strtoupper((string)($discountMeta['tipo']??'PORCENTAJE')),
+        'descuentoValor'=>(float)($discountMeta['valor']??0),
+        'descuento'=>(float)($discountMeta['monto']??0),
+        'total'=>(float)($get('Total')??0),
+        'banco'=>(string)($get('Banco')??''),
+        'cuenta'=>(string)($get('Cuenta')??''),
+        'clabe'=>(string)($get('CLABE')??''),
+        'observaciones'=>'',
+        'estado'=>$state,
+        'revision'=>(int)($get('Revision')??0),
+        'ultimoComentario'=>(string)($get('UltimoComentario')??''),
+    ];
+}
+:'
+
+    $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
+    $emailAttachments=[[
+        '@odata.type'=>'#microsoft.graph.fileAttachment',
+        'name'=>'ODC_'.$folio.'.pdf',
+        'contentType'=>'application/pdf',
+        'contentBytes'=>base64_encode($pdf),
+    ]];
+    $emailAttachments=array_merge($emailAttachments,$uploaded);
+
+    $to=ordenes_approver_emails();
+    $cc=array_values(array_filter([$requesterEmail,'jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx']));
+    ordenes_send_message('AUTORIZACION ODC '.$folio.' | '.$proveedor,$html,$to,$cc,$emailAttachments);
+
+    ordenes_update_item($itemId,[
+        'Estado'=>'PENDIENTE_AUTORIZACION',
+        'Revision'=>$revision,
+        'HistorialAutorizacion'=>json_encode($history,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+        'UltimoComentario'=>trim((string)($input['observaciones']??'')),
+        'UltimaRevisionPor'=>'',
+        'UltimaRevisionCorreo'=>'',
+        'FechaEnvioAutorizacion'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s'),
+        'FechaResolucion'=>null,
+        'Ambiente'=>'PRODUCCION',
+    ]);
+
+    return [
+        'ok'=>true,
+        'recipient'=>implode(', ',$to),
+        'sender'=>'sistemas@juanpablo.com.mx',
+        'folio'=>$folio,
+        'revision'=>$revision,
+    ];
+}
+
+function ordenes_list_user_records(array $user,string $estado): array
+{
+    $email=strtolower(trim((string)($user['email']??'')));
+    if($email==='') throw new RuntimeException('La sesion no contiene correo electronico.');
+
+    $estado=strtoupper(trim($estado));
+    if(!in_array($estado,['BORRADOR','RECHAZADA','PENDIENTE_AUTORIZACION','APROBADA','ENVIADA'],true)) throw new InvalidArgumentException('Estado de ODC no valido.');
+
+    $emailField=ordenes_field('SolicitanteCorreo');
+    $estadoField=ordenes_field('Estado');
+    if($emailField===null || $estadoField===null) throw new RuntimeException('No fue posible resolver los campos de consulta de Ordenes de Compra.');
+
+    $canonical=['Folio','Fecha','Proveedor','Total','Estado','SolicitanteCorreo','SolicitanteNombre','Revision','UltimoComentario'];
+    $resolved=['Id'];
+    $fieldMap=[];
+    foreach($canonical as $name){
+        $field=ordenes_field($name);
+        if($field!==null){
+            $resolved[]=$field;
+            $fieldMap[$name]=$field;
+        }
+    }
+
+    $filter=$emailField." eq '".str_replace("'","''",$email)."' and ".$estadoField." eq '".$estado."'";
+    $query=http_build_query([
+        '$select'=>implode(',',array_values(array_unique($resolved))),
+        '$filter'=>$filter,
+        '$orderby'=>'Id desc',
+        '$top'=>'100',
+    ],'','&',PHP_QUERY_RFC3986);
+
+    $s=ordenes_session();
+    $data=ordenes_http_json(ordenes_list_base().'/items?'.$query,'GET',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+    ]);
+
+    $out=[];
+    foreach(($data['value']??[]) as $row){
+        if(!is_array($row)) continue;
+        $record=['id'=>(int)($row['Id']??0)];
+        foreach($fieldMap as $canonicalName=>$internalName){
+            $record[$canonicalName]=$row[$internalName]??null;
+        }
+        $out[]=$record;
+    }
+    return $out;
+}
+
+function ordenes_sp_graph_attachments(int $itemId): array
+{
+    $out=[];
+    foreach(ordenes_sharepoint_attachments($itemId) as $meta){
+        $name=(string)($meta['FileName']??'archivo');
+        $url=(string)($meta['ServerRelativeUrl']??'');
+        if($url==='') continue;
+        $out[]=[
+            '@odata.type'=>'#microsoft.graph.fileAttachment',
+            'name'=>$name,
+            'contentType'=>'application/octet-stream',
+            'contentBytes'=>base64_encode(ordenes_sharepoint_attachment_bytes($url)),
+        ];
+    }
+    return $out;
+}
+
+function ordenes_list_inbox_records(): array
+{
+    $stateField=ordenes_field('Estado');
+    if($stateField===null) throw new RuntimeException('No fue posible resolver el estado de las ODC.');
+    $canonical=['Folio','Fecha','Proveedor','Total','Estado','SolicitanteNombre','SolicitanteCorreo','Revision'];
+    $resolved=['Id']; $fieldMap=[];
+    foreach($canonical as $name){
+        $field=ordenes_field($name);
+        if($field!==null){ $resolved[]=$field; $fieldMap[$name]=$field; }
+    }
+    $query=http_build_query([
+        '$select'=>implode(',',array_values(array_unique($resolved))),
+        '$filter'=>$stateField." eq 'PENDIENTE_AUTORIZACION'",
+        '$orderby'=>'Id desc',
+        '$top'=>'100',
+    ],'','&',PHP_QUERY_RFC3986);
+    $s=ordenes_session();
+    $data=ordenes_http_json(ordenes_list_base().'/items?'.$query,'GET',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+    ]);
+    $out=[];
+    foreach(($data['value']??[]) as $row){
+        if(!is_array($row)) continue;
+        $record=['id'=>(int)($row['Id']??0)];
+        foreach($fieldMap as $canonicalName=>$internalName) $record[$canonicalName]=$row[$internalName]??null;
+        $out[]=$record;
+    }
+    return $out;
+}
+
+function ordenes_item_payload(int $itemId): array
+{
+    $item=ordenes_get_item($itemId);
+    $get=static function(string $name) use ($item): mixed {
+        $field=ordenes_field($name);
+        return $field!==null?($item[$field]??null):null;
+    };
+    $items=[];
+    $discountMeta=['aplica'=>false,'tipo'=>'PORCENTAJE','valor'=>0.0,'monto'=>0.0];
+    $raw=(string)($get('PartidasJson')??'');
+    if($raw!==''){
+        $decoded=json_decode($raw,true);
+        if(is_array($decoded)){
+            if(isset($decoded['items']) && is_array($decoded['items'])){
+                $items=$decoded['items'];
+                if(isset($decoded['descuento']) && is_array($decoded['descuento'])){
+                    $discountMeta=array_merge($discountMeta,$decoded['descuento']);
+                }
+            }else{
+                // Compatibilidad con ODC anteriores, donde PartidasJson era un arreglo simple.
+                $items=$decoded;
+            }
+        }
+    }
+    return [
+        'itemId'=>$itemId,
+        'folio'=>(string)($get('Folio')??''),
+        'fecha'=>substr((string)($get('Fecha')??''),0,10),
+        'empresaCompradora'=>(string)($get('EmpresaCompradora')??'MEGUESA'),
+        'proveedor'=>(string)($get('Proveedor')??''),
+        'domicilio'=>(string)($get('Domicilio')??''),
+        'rfc'=>(string)($get('RFC')??''),
+        'telefono'=>(string)($get('Telefono')??''),
+        'ciudadEstado'=>(string)($get('CiudadEstado')??''),
+        'condicionPago'=>(string)($get('CondicionPago')??''),
+        'tiempoEntrega'=>(string)($get('TiempoEntrega')??''),
+        'moneda'=>(string)($get('Moneda')??'MXN'),
+        'tipoCambio'=>(float)($get('TipoCambio')??1),
+        'items'=>$items,
+        'subtotal'=>(float)($get('Subtotal')??0),
+        'ivaPct'=>(float)($get('IvaPct')??0),
+        'iva'=>(float)($get('IVA')??0),
+        'retIsrPct'=>(float)($get('RetIsrPct')??0),
+        'retIsr'=>(float)($get('RetencionISR')??0),
+        'retIvaPct'=>(float)($get('RetIvaPct')??0),
+        'retIva'=>(float)($get('RetencionIVA')??0),
+        'aplicaDescuento'=>!empty($discountMeta['aplica']),
+        'descuentoTipo'=>strtoupper((string)($discountMeta['tipo']??'PORCENTAJE')),
+        'descuentoValor'=>(float)($discountMeta['valor']??0),
+        'descuento'=>(float)($discountMeta['monto']??0),
+        'total'=>(float)($get('Total')??0),
+        'banco'=>(string)($get('Banco')??''),
+        'cuenta'=>(string)($get('Cuenta')??''),
+        'clabe'=>(string)($get('CLABE')??''),
+        'solicitanteNombre'=>(string)($get('SolicitanteNombre')??''),
+        'solicitanteCorreo'=>(string)($get('SolicitanteCorreo')??''),
+        'estado'=>(string)($get('Estado')??''),
+        'revision'=>(int)($get('Revision')??0),
+        'ultimoComentario'=>(string)($get('UltimoComentario')??''),
+        'historial'=>ordenes_history_array($item),
+    ];
+}
+
+function ordenes_process_authorization(int $itemId,array $user,string $action,string $comment=''): array
+{
+    ordenes_ensure_approval_schema();
+    if(!ordenes_user_is_approver($user)) throw new RuntimeException('Tu cuenta no puede autorizar ordenes.');
+
+    $action=strtoupper(trim($action));
+    if(!in_array($action,['COMENTARIO','APROBAR','RECHAZAR'],true)) throw new InvalidArgumentException('Accion no valida.');
+    $comment=trim($comment);
+    if($action==='RECHAZAR' && $comment==='') throw new RuntimeException('El comentario es obligatorio para rechazar una ODC.');
+
+    $payload=ordenes_item_payload($itemId);
+    if(strtoupper($payload['estado'])!=='PENDIENTE_AUTORIZACION') throw new RuntimeException('Esta ODC ya no esta pendiente de autorizacion.');
+
+    $item=ordenes_get_item($itemId);
+    $history=ordenes_history_array($item);
+    $reviewerName=trim((string)($user['name']??'Autorizador'));
+    $reviewerEmail=strtolower(trim((string)($user['email']??'')));
+    $eventAction=$action==='COMENTARIO'?'COMENTARIO':($action==='APROBAR'?'APROBADA':'RECHAZADA');
+    $history[]=[
+        'fecha'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format(DATE_ATOM),
+        'revision'=>(int)$payload['revision'],
+        'accion'=>$eventAction,
+        'usuario'=>$reviewerName,
+        'correo'=>$reviewerEmail,
+        'comentario'=>$comment,
+    ];
+
+    $requester=(string)$payload['solicitanteCorreo'];
+    $folio=(string)$payload['folio'];
+    $provider=(string)$payload['proveedor'];
+    $reviewUrl='https://portal.juanpablo.com.mx/ordenes-compra/revisar.php?id='.$itemId;
+    $body='<h2>ODC '.$folio.' - '.$eventAction.'</h2>'
+        .'<p>Proveedor: '.htmlspecialchars($provider,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</p>'
+        .'<p>Revision: R'.(int)$payload['revision'].'</p>'
+        .'<p>Revisado por: '.htmlspecialchars($reviewerName,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8').'</p>'
+        .'<p>Comentarios: '.nl2br(htmlspecialchars(($allComments=implode("\n\n",array_values(array_filter(array_map(static fn($ev)=>is_array($ev)?trim((string)($ev['comentario']??'')):'',$history)))))!==''?$allComments:'Sin comentarios.',ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8')).'</p>'
+        .'<p><a href="'.htmlspecialchars($reviewUrl,ENT_QUOTES,'UTF-8').'">Abrir ODC</a></p>';
+
+    $to=$action==='RECHAZAR'?[$requester]:array_values(array_unique(array_merge([$requester],ordenes_approver_emails())));
+    $cc=['jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx'];
+    if($action==='RECHAZAR') $cc=array_merge(ordenes_approver_emails(),$cc);
+
+    $attachments=[];
+    if($action!=='COMENTARIO'){
+        $pdf=odc_pdf_generate($payload,['name'=>$payload['solicitanteNombre'],'email'=>$requester],(string)($_SERVER['DOCUMENT_ROOT']??''));
+        $attachments[]=[
+            '@odata.type'=>'#microsoft.graph.fileAttachment',
+            'name'=>'ODC_'.$folio.'.pdf',
+            'contentType'=>'application/pdf',
+            'contentBytes'=>base64_encode($pdf),
+        ];
+        $attachments=array_merge($attachments,ordenes_sp_graph_attachments($itemId));
+    }
+
+    ordenes_send_message($eventAction.' ODC '.$folio.' | '.$provider,$body,$to,$cc,$attachments);
+
+    $values=[
+        'HistorialAutorizacion'=>json_encode($history,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+        'UltimoComentario'=>$comment,
+        'UltimaRevisionPor'=>$reviewerName,
+        'UltimaRevisionCorreo'=>$reviewerEmail,
+    ];
+    if($action==='APROBAR'){
+        $values['Estado']='APROBADA';
+        $values['FechaResolucion']=(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s');
+    }elseif($action==='RECHAZAR'){
+        $values['Estado']='RECHAZADA';
+        $values['FechaResolucion']=(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s');
+    }
+    ordenes_update_item($itemId,$values);
+
+    return ['ok'=>true,'action'=>$eventAction,'folio'=>$folio];
+}
+
+function ordenes_load_user_draft(int $itemId,array $user): array
+{
+    if($itemId<=0) throw new InvalidArgumentException('Borrador invalido.');
+    $email=strtolower(trim((string)($user['email']??'')));
+    if($email==='') throw new RuntimeException('La sesion no contiene correo electronico.');
+
+    $item=ordenes_get_item($itemId);
+    $ownerField=ordenes_field('SolicitanteCorreo');
+    $stateField=ordenes_field('Estado');
+    $owner=$ownerField!==null?strtolower(trim((string)($item[$ownerField]??''))):'';
+    $state=$stateField!==null?strtoupper(trim((string)($item[$stateField]??''))):'';
+
+    if($owner!==$email) throw new RuntimeException('No tienes permiso para abrir este borrador.');
+    if(!in_array($state,['BORRADOR','RECHAZADA'],true)) throw new RuntimeException('La orden seleccionada no esta disponible para correccion.');
+
+    $get=static function(string $name) use ($item): mixed {
+        $field=ordenes_field($name);
+        return $field!==null?($item[$field]??null):null;
+    };
+
+    $items=[];
+    $discountMeta=['aplica'=>false,'tipo'=>'PORCENTAJE','valor'=>0.0,'monto'=>0.0];
+    $raw=(string)($get('PartidasJson')??'');
+    if($raw!==''){
+        $decoded=json_decode($raw,true);
+        if(is_array($decoded)){
+            if(isset($decoded['items']) && is_array($decoded['items'])){
+                $items=$decoded['items'];
+                if(isset($decoded['descuento']) && is_array($decoded['descuento'])){
+                    $discountMeta=array_merge($discountMeta,$decoded['descuento']);
+                }
+            }else{
+                // Compatibilidad con ODC anteriores, donde PartidasJson era un arreglo simple.
+                $items=$decoded;
+            }
+        }
+    }
+
+    return [
+        'itemId'=>$itemId,
+        'folio'=>(string)($get('Folio')??''),
+        'fecha'=>substr((string)($get('Fecha')??''),0,10),
+        'empresaCompradora'=>(string)($get('EmpresaCompradora')??'MEGUESA'),
+        'proveedor'=>(string)($get('Proveedor')??''),
+        'domicilio'=>(string)($get('Domicilio')??''),
+        'rfc'=>(string)($get('RFC')??''),
+        'telefono'=>(string)($get('Telefono')??''),
+        'ciudadEstado'=>(string)($get('CiudadEstado')??''),
+        'condicionPago'=>(string)($get('CondicionPago')??''),
+        'tiempoEntrega'=>(string)($get('TiempoEntrega')??''),
+        'moneda'=>(string)($get('Moneda')??'MXN'),
+        'tipoCambio'=>(float)($get('TipoCambio')??1),
+        'items'=>$items,
+        'subtotal'=>(float)($get('Subtotal')??0),
+        'ivaPct'=>(float)($get('IvaPct')??0),
+        'iva'=>(float)($get('IVA')??0),
+        'retIsrPct'=>(float)($get('RetIsrPct')??0),
+        'retIsr'=>(float)($get('RetencionISR')??0),
+        'retIvaPct'=>(float)($get('RetIvaPct')??0),
+        'retIva'=>(float)($get('RetencionIVA')??0),
+        'aplicaDescuento'=>!empty($discountMeta['aplica']),
+        'descuentoTipo'=>strtoupper((string)($discountMeta['tipo']??'PORCENTAJE')),
+        'descuentoValor'=>(float)($discountMeta['valor']??0),
+        'descuento'=>(float)($discountMeta['monto']??0),
+        'total'=>(float)($get('Total')??0),
+        'banco'=>(string)($get('Banco')??''),
+        'cuenta'=>(string)($get('Cuenta')??''),
+        'clabe'=>(string)($get('CLABE')??''),
+        'observaciones'=>'',
+        'estado'=>$state,
+        'revision'=>(int)($get('Revision')??0),
+        'ultimoComentario'=>(string)($get('UltimoComentario')??''),
+    ];
+}
+).number_format($total,2,'.',',');
+    $observaciones=trim((string)($input['observaciones']??''));
     $reviewUrl='https://portal.juanpablo.com.mx/ordenes-compra/revisar.php?id='.$itemId;
     $h=static fn(string $v):string=>htmlspecialchars($v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+    $observacionesHtml=$observaciones!=='' ? nl2br($h($observaciones)) : '<em>Sin observaciones.</em>';
 
     $html='<h2>Orden de Compra '.$h($folio).' pendiente de autorizacion</h2>'
         .'<p><strong>Solicitante:</strong> '.$h($requesterName).'</p>'
         .'<p><strong>Proveedor:</strong> '.$h($proveedor).'</p>'
         .'<p><strong>Total:</strong> '.$h($totalText).'</p>'
         .'<p><strong>Revision:</strong> R'.$revision.'</p>'
+        .'<div style="margin:16px 0;padding:12px 14px;border:1px solid #e1c77a;background:#fffaf0;border-radius:6px;">'
+        .'<strong>Observaciones para Finanzas</strong><br>'
+        .'<div style="margin-top:6px;">'.$observacionesHtml.'</div>'
+        .'</div>'
         .'<p><a href="'.$h($reviewUrl).'">Abrir en el Buzon de Ordenes</a></p>';
 
     $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
