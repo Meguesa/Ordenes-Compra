@@ -637,6 +637,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'initialDraft' => is_array($initialDraft) ? $initialDraft : null,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261019-envio-ajax-2"></script>
+<script src="assets/js/app.js?v=20261020-adjuntos-10mb-1"></script>
 </body>
 </html>
