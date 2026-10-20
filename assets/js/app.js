@@ -337,10 +337,14 @@
     const input = $('attachments');
     if (!input) return true;
     const files = Array.from(input.files || []);
-    const total = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
     const errors = [];
     if (files.length > 5) errors.push('Solo se permiten hasta 5 archivos.');
-    if (total > 2621440) errors.push('El tamaño combinado no puede superar 2.5 MB.');
+
+    const oversized = files.filter((file) => Number(file.size || 0) > 10485760);
+    if (oversized.length) {
+      errors.push('Cada archivo puede pesar como máximo 10 MB.');
+    }
+
     input.setCustomValidity(errors.join(' '));
     return errors.length === 0;
   }
