@@ -1056,7 +1056,11 @@ function ordenes_process_authorization(int $itemId,array $user,string $action,st
             'contentType'=>'application/pdf',
             'contentBytes'=>base64_encode($pdf),
         ];
-        $attachments=array_merge($attachments,ordenes_sp_graph_attachments($itemId));
+
+        // Los archivos originales ya permanecen almacenados en SharePoint.
+        // No se vuelven a descargar para el correo de resolucion, evitando que
+        // nombres con espacios/acentos o archivos grandes bloqueen la decision.
+        $body.='<p><em>Los documentos adjuntos originales permanecen disponibles desde la ODC en el portal.</em></p>';
     }
 
     ordenes_send_message($eventAction.' ODC '.$folio.' | '.$provider,$body,$to,$cc,$attachments);
