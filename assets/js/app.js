@@ -170,6 +170,7 @@
       domicilio: $('domicilio') ? $('domicilio').value.trim() : '',
       ciudadEstado: $('ciudadEstado').value.trim(),
       condicionPago: $('condicionPago').value.trim(),
+      modoPago: $('modoPago') ? $('modoPago').value : 'TRANSFERENCIA',
       tiempoEntrega: $('tiempoEntrega').value.trim(),
       moneda: $('moneda').value,
       tipoCambio: numberValue($('tipoCambio').value),
@@ -456,7 +457,7 @@
 
   function populateDraft(data) {
     if (!data || typeof data !== 'object') return;
-    const ids = ['proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe','observaciones'];
+    const ids = ['proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','modoPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe','observaciones'];
     ids.forEach((id) => {
       if (data[id] !== undefined && $(id)) $(id).value = data[id];
     });
@@ -549,7 +550,8 @@
             <tr><th>DOMICILIO:</th><td>${escapeHtml(d.domicilio || '')}</td><th>TELEFONO:</th><td>${escapeHtml(d.telefono || '')}</td></tr>
             <tr><th>CIUDAD Y ESTADO:</th><td>${escapeHtml(d.ciudadEstado || '')}</td><th>T/ENTREGA:</th><td>${escapeHtml(d.tiempoEntrega || '')}</td></tr>
             <tr><th>COND. DE PAGO:</th><td>${escapeHtml(d.condicionPago || '')}</td><th>T. CAMBIO:</th><td>${escapeHtml(String(d.tipoCambio || 1))}</td></tr>
-            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+            <tr><th>MODO DE PAGO:</th><td>${escapeHtml(d.modoPago === 'EFECTIVO' ? 'Efectivo' : 'Transferencia bancaria')}</td><th>RFC:</th><td>${escapeHtml(d.rfc || '')}</td></tr>
+            <tr><th>MONEDA:</th><td>${escapeHtml(d.moneda || 'MXN')}</td><th></th><td></td></tr>
           </tbody>
         </table>
 
@@ -582,9 +584,10 @@
 
             <table class="odc-bank-table">
               <tbody>
-                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.cuenta || '')}</td></tr>
-                <tr><th>No. Clabe</th><td>${escapeHtml(d.clabe || '')}</td></tr>
-                <tr><th>Banco</th><td>${escapeHtml(d.banco || '')}</td></tr>
+                <tr><th>Modo de pago</th><td>${escapeHtml(d.modoPago === 'EFECTIVO' ? 'Efectivo' : 'Transferencia bancaria')}</td></tr>
+                <tr><th>No. Cuenta.</th><td>${escapeHtml(d.modoPago === 'EFECTIVO' ? 'No aplica' : (d.cuenta || ''))}</td></tr>
+                <tr><th>No. Clabe</th><td>${escapeHtml(d.modoPago === 'EFECTIVO' ? 'No aplica' : (d.clabe || ''))}</td></tr>
+                <tr><th>Banco</th><td>${escapeHtml(d.modoPago === 'EFECTIVO' ? 'No aplica' : (d.banco || ''))}</td></tr>
               </tbody>
             </table>
           </div>
@@ -604,6 +607,22 @@
   function closeModal() {
     $('previewModal').hidden = true;
     document.body.style.overflow = '';
+  }
+
+  function syncPaymentMode() {
+    const mode = $('modoPago') ? $('modoPago').value : 'TRANSFERENCIA';
+    const cash = mode === 'EFECTIVO';
+    ['banco','cuenta','clabe'].forEach((id) => {
+      const input = $(id);
+      if (!input) return;
+      input.disabled = cash;
+      if (cash) input.value = '';
+    });
+    if ($('paymentDetailsHelp')) {
+      $('paymentDetailsHelp').textContent = cash
+        ? 'Pago en efectivo: no se requieren datos bancarios.'
+        : 'Información bancaria para el pago al proveedor.';
+    }
   }
 
   $('btnAddItem').addEventListener('click', () => addItem());
@@ -651,6 +670,10 @@
       validateAttachments();
     });
   }
+  if ($('modoPago')) {
+    $('modoPago').addEventListener('change', syncPaymentMode);
+  }
+
   $('moneda').addEventListener('change', () => {
     if ($('descuentoUnidad') && $('descuentoTipo')) {
       $('descuentoUnidad').textContent = $('descuentoTipo').value === 'MONTO'
@@ -697,6 +720,7 @@
     }
   }
   if (restored) populateDraft(restored); else addItem();
+  syncPaymentMode();
 
   if (context.saveOk && context.folio) {
     const saved = currentData();
