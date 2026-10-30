@@ -148,7 +148,8 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
         ['DOMICILIO:',(string)($d['domicilio']??''),'TELEFONO:',(string)($d['telefono']??'')],
         ['CIUDAD Y ESTADO:',(string)($d['ciudadEstado']??''),'T/ENTREGA:',(string)($d['tiempoEntrega']??'')],
         ['COND. DE PAGO:',(string)($d['condicionPago']??''),'T. CAMBIO:',(string)($d['tipoCambio']??1)],
-        ['MONEDA:',$currency,'RFC:',(string)($d['rfc']??'')],
+        ['MODO DE PAGO:',strtoupper((string)($d['modoPago']??'TRANSFERENCIA'))==='EFECTIVO'?'EFECTIVO':'TRANSFERENCIA','RFC:',(string)($d['rfc']??'')],
+        ['MONEDA:',$currency,'',''],
     ];
     foreach($rows as $i=>$row){
         $y=$top-$rh*($i+1); $x=$left;
@@ -211,9 +212,11 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
         odc_pdf_text($s,420,$y+6,$row[0],7,$i===$lastTotalIndex);
         odc_pdf_text($s,505,$y+6,odc_pdf_money((float)$row[1],$currency),7,true);
     }
-    odc_pdf_fit_text($s,350,$bottom-142,'No. Cuenta: '.trim((string)($d['cuenta']??'')),220,7,4.2,false);
-    odc_pdf_fit_text($s,350,$bottom-157,'No. Clabe: '.trim((string)($d['clabe']??'')),220,7,4.2,false);
-    odc_pdf_fit_text($s,350,$bottom-172,'Banco: '.trim((string)($d['banco']??'')),220,7,4.2,false);
+    $cash=strtoupper(trim((string)($d['modoPago']??'TRANSFERENCIA')))==='EFECTIVO';
+    odc_pdf_fit_text($s,350,$bottom-142,'Modo de pago: '.($cash?'EFECTIVO':'TRANSFERENCIA'),220,7,4.2,true);
+    odc_pdf_fit_text($s,350,$bottom-157,'No. Cuenta: '.($cash?'NO APLICA':trim((string)($d['cuenta']??''))),220,7,4.2,false);
+    odc_pdf_fit_text($s,350,$bottom-172,'No. Clabe: '.($cash?'NO APLICA':trim((string)($d['clabe']??''))),220,7,4.2,false);
+    odc_pdf_fit_text($s,350,$bottom-187,'Banco: '.($cash?'NO APLICA':trim((string)($d['banco']??''))),220,7,4.2,false);
 
     $objects=[];
     $objects[1]='<< /Type /Catalog /Pages 2 0 R >>';

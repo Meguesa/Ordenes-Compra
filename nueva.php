@@ -438,6 +438,12 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
         <label>Condición de pago *
           <input id="condicionPago" type="text" required placeholder="Ej. Pago total / Crédito 30 días">
         </label>
+        <label>Modo de pago *
+          <select id="modoPago" required>
+            <option value="TRANSFERENCIA" selected>Transferencia bancaria</option>
+            <option value="EFECTIVO">Efectivo</option>
+          </select>
+        </label>
         <label>Tiempo de entrega
           <input id="tiempoEntrega" type="text" placeholder="Ej. 5 días hábiles">
         </label>
@@ -479,8 +485,8 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
         <div class="section-title">
           <span>4</span>
           <div>
-            <h2>Datos bancarios</h2>
-            <p>Información para el pago al proveedor.</p>
+            <h2>Datos de pago</h2>
+            <p id="paymentDetailsHelp">Información bancaria para el pago al proveedor.</p>
           </div>
         </div>
         <div class="form-grid grid-2">
@@ -637,6 +643,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'initialDraft' => is_array($initialDraft) ? $initialDraft : null,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261020-adjuntos-10mb-1"></script>
+<script src="assets/js/app.js?v=20261030-modo-pago-manager-1"></script>
 </body>
 </html>

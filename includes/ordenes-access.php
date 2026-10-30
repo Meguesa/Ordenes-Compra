@@ -155,7 +155,7 @@ function ordenes_aliases(): array {
     return [
       'Title'=>['Title','Titulo'],'Folio'=>['Folio'],'Fecha'=>['Fecha'],'EmpresaCompradora'=>['EmpresaCompradora','Empresa Compradora'],
       'Proveedor'=>['Proveedor'],'Domicilio'=>['Domicilio'],'RFC'=>['RFC'],'Telefono'=>['Telefono','Teléfono'],'CiudadEstado'=>['CiudadEstado','Ciudad Estado'],
-      'CondicionPago'=>['CondicionPago','Condicion de Pago'],'TiempoEntrega'=>['TiempoEntrega','Tiempo de Entrega'],'Moneda'=>['Moneda'],
+      'CondicionPago'=>['CondicionPago','Condicion de Pago'],'ModoPago'=>['ModoPago','Modo de Pago'],'TiempoEntrega'=>['TiempoEntrega','Tiempo de Entrega'],'Moneda'=>['Moneda'],
       'TipoCambio'=>['TipoCambio','Tipo de Cambio'],'PartidasJson'=>['PartidasJson','Partidas'],'Subtotal'=>['Subtotal'],'IvaPct'=>['IvaPct'],
       'IVA'=>['IVA'],'RetIsrPct'=>['RetIsrPct'],'RetencionISR'=>['RetencionISR','Retencion ISR'],'RetIvaPct'=>['RetIvaPct'],
       'RetencionIVA'=>['RetencionIVA','Retencion IVA'],'Total'=>['Total'],'Banco'=>['Banco'],'Cuenta'=>['Cuenta'],'CLABE'=>['CLABE'],
@@ -172,7 +172,7 @@ function ordenes_aliases(): array {
 }
 
 function ordenes_schema(): array {
-    $text=['Folio','EmpresaCompradora','Proveedor','Domicilio','RFC','Telefono','CiudadEstado','CondicionPago','TiempoEntrega','Moneda','Banco','Cuenta','CLABE','SolicitanteNombre','SolicitanteCorreo','Estado','Ambiente','UltimaRevisionPor','UltimaRevisionCorreo'];
+    $text=['Folio','EmpresaCompradora','Proveedor','Domicilio','RFC','Telefono','CiudadEstado','CondicionPago','ModoPago','TiempoEntrega','Moneda','Banco','Cuenta','CLABE','SolicitanteNombre','SolicitanteCorreo','Estado','Ambiente','UltimaRevisionPor','UltimaRevisionCorreo'];
     $num=['TipoCambio','Subtotal','IvaPct','IVA','RetIsrPct','RetencionISR','RetIvaPct','RetencionIVA','Total','Revision'];
     $out=['Fecha'=>'DateTime','FechaEnvioAutorizacion'=>'DateTime','FechaResolucion'=>'DateTime','PartidasJson'=>'Note','HistorialAutorizacion'=>'Note','UltimoComentario'=>'Note']; foreach($text as $x)$out[$x]='Text'; foreach($num as $x)$out[$x]='Number'; return $out;
 }
@@ -268,14 +268,23 @@ function ordenes_user_is_approver(?array $user=null): bool
     return $email!=='' && in_array($email,ordenes_approver_access_emails(),true);
 }
 
-function ordenes_ensure_approval_schema(): void
+function ordenes_ensure_schema_fields(array $needed,string $context='la herramienta'): void
 {
-    $needed=['Revision','HistorialAutorizacion','UltimoComentario','UltimaRevisionPor','UltimaRevisionCorreo','FechaEnvioAutorizacion','FechaResolucion'];
+    $needed=array_values(array_unique(array_filter(array_map(static fn($v):string=>trim((string)$v),$needed))));
+    if(!$needed) return;
     $missing=array_values(array_intersect(ordenes_missing_schema_fields(),$needed));
     if(!$missing) return;
     $result=ordenes_try_prepare_schema();
     $still=array_values(array_intersect($result['missing']??[],$needed));
-    if($still) throw new RuntimeException('Faltan columnas del flujo de autorizacion: '.implode(', ',$still).'.');
+    if($still) throw new RuntimeException('Faltan columnas para '.$context.': '.implode(', ',$still).'.');
+}
+
+function ordenes_ensure_approval_schema(): void
+{
+    ordenes_ensure_schema_fields(
+        ['Revision','HistorialAutorizacion','UltimoComentario','UltimaRevisionPor','UltimaRevisionCorreo','FechaEnvioAutorizacion','FechaResolucion'],
+        'el flujo de autorizacion'
+    );
 }
 
 function ordenes_required_schema_fields(): array {
@@ -393,6 +402,8 @@ function ordenes_num_value(mixed $value): float
 
 function ordenes_save_draft_payload(array $input, array $user): array
 {
+    ordenes_ensure_schema_fields(['ModoPago'],'guardar el modo de pago');
+
     $missingSchema = ordenes_missing_schema_fields();
     $missingRequired = array_values(array_intersect($missingSchema, ordenes_required_schema_fields()));
     if (count($missingRequired) > 0) {
@@ -406,6 +417,10 @@ function ordenes_save_draft_payload(array $input, array $user): array
     $proveedor = trim((string)($input['proveedor'] ?? ''));
     $rfc = strtoupper(trim((string)($input['rfc'] ?? '')));
     $condicionPago = trim((string)($input['condicionPago'] ?? ''));
+    $modoPago = strtoupper(trim((string)($input['modoPago'] ?? 'TRANSFERENCIA')));
+    if (!in_array($modoPago, ['TRANSFERENCIA','EFECTIVO'], true)) {
+        throw new RuntimeException('Selecciona un modo de pago valido.');
+    }
     $fecha = trim((string)($input['fecha'] ?? ''));
     if ($proveedor === '' || $rfc === '' || $condicionPago === '' || $fecha === '') {
         throw new RuntimeException('Proveedor, RFC, condicion de pago y fecha son obligatorios para guardar el borrador.');
@@ -477,6 +492,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
         'Telefono' => trim((string)($input['telefono'] ?? '')),
         'CiudadEstado' => trim((string)($input['ciudadEstado'] ?? '')),
         'CondicionPago' => $condicionPago,
+        'ModoPago' => $modoPago,
         'TiempoEntrega' => trim((string)($input['tiempoEntrega'] ?? '')),
         'Moneda' => strtoupper(trim((string)($input['moneda'] ?? 'MXN'))),
         'TipoCambio' => max(0.0, ordenes_num_value($input['tipoCambio'] ?? 1)),
@@ -489,9 +505,9 @@ function ordenes_save_draft_payload(array $input, array $user): array
         'RetIvaPct' => $retIvaPct,
         'RetencionIVA' => $retIva,
         'Total' => $total,
-        'Banco' => trim((string)($input['banco'] ?? '')),
-        'Cuenta' => trim((string)($input['cuenta'] ?? '')),
-        'CLABE' => trim((string)($input['clabe'] ?? '')),
+        'Banco' => $modoPago === 'EFECTIVO' ? '' : trim((string)($input['banco'] ?? '')),
+        'Cuenta' => $modoPago === 'EFECTIVO' ? '' : trim((string)($input['cuenta'] ?? '')),
+        'CLABE' => $modoPago === 'EFECTIVO' ? '' : trim((string)($input['clabe'] ?? '')),
         'SolicitanteNombre' => $userName,
         'SolicitanteCorreo' => $userEmail,
         'Estado' => 'BORRADOR',
@@ -583,6 +599,56 @@ function ordenes_mail_graph_token(): string
     $token=trim((string)($data['access_token']??''));
     if($token==='') throw new RuntimeException('Microsoft Entra no devolvio token de correo.');
     return $token;
+}
+
+function ordenes_graph_get_json(string $url,string $token): array
+{
+    $curl=curl_init($url);
+    if($curl===false) throw new RuntimeException('No fue posible consultar Microsoft Graph.');
+    curl_setopt_array($curl,[
+        CURLOPT_RETURNTRANSFER=>true,
+        CURLOPT_FOLLOWLOCATION=>false,
+        CURLOPT_CONNECTTIMEOUT=>8,
+        CURLOPT_TIMEOUT=>20,
+        CURLOPT_HTTPGET=>true,
+        CURLOPT_HTTPHEADER=>[
+            'Authorization: Bearer '.$token,
+            'Accept: application/json',
+        ],
+        CURLOPT_SSL_VERIFYPEER=>true,
+        CURLOPT_SSL_VERIFYHOST=>2,
+    ]);
+    $response=curl_exec($curl);
+    $status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
+    $error=curl_error($curl);
+    curl_close($curl);
+
+    if($response===false) throw new RuntimeException('Microsoft Graph no respondio: '.$error);
+    $data=json_decode((string)$response,true);
+    if($status<200 || $status>=300){
+        $detail=is_array($data)?trim((string)($data['error']['message']??'')):'';
+        throw new RuntimeException('Microsoft Graph respondio HTTP '.$status.($detail!==''?': '.$detail:'.'));
+    }
+    return is_array($data)?$data:[];
+}
+
+function ordenes_requester_manager_email(string $requesterEmail): string
+{
+    $requesterEmail=strtolower(trim($requesterEmail));
+    if($requesterEmail==='' || !filter_var($requesterEmail,FILTER_VALIDATE_EMAIL)) return '';
+
+    try{
+        $token=ordenes_mail_graph_token();
+        $url='https://graph.microsoft.com/v1.0/users/'.rawurlencode($requesterEmail).'/manager?'
+            .http_build_query(['$select'=>'displayName,mail,userPrincipalName'],'','&',PHP_QUERY_RFC3986);
+        $manager=ordenes_graph_get_json($url,$token);
+        $email=strtolower(trim((string)($manager['mail']??$manager['userPrincipalName']??'')));
+        if($email==='' || !filter_var($email,FILTER_VALIDATE_EMAIL) || $email===$requesterEmail) return '';
+        return $email;
+    }catch(Throwable $error){
+        error_log('ODC manager lookup para '.$requesterEmail.': '.$error->getMessage());
+        return '';
+    }
 }
 
 function ordenes_prepare_uploaded_attachments(array $files): array
@@ -800,6 +866,9 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $total=(float)($input['total']??0);
     $totalText=($moneda==='USD'?'US$':'$').number_format($total,2,'.',',');
     $observaciones=trim((string)($input['observaciones']??''));
+    $modoPago=strtoupper(trim((string)($input['modoPago']??'TRANSFERENCIA')));
+    if(!in_array($modoPago,['TRANSFERENCIA','EFECTIVO'],true)) $modoPago='TRANSFERENCIA';
+    $modoPagoLabel=$modoPago==='EFECTIVO'?'Efectivo':'Transferencia bancaria';
     $reviewUrl='https://portal.juanpablo.com.mx/ordenes-compra/revisar.php?id='.$itemId;
     $h=static fn(string $v):string=>htmlspecialchars($v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
     $observacionesHtml=$observaciones!=='' ? nl2br($h($observaciones)) : '<em>Sin observaciones.</em>';
@@ -808,6 +877,7 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
         .'<p><strong>Solicitante:</strong> '.$h($requesterName).'</p>'
         .'<p><strong>Proveedor:</strong> '.$h($proveedor).'</p>'
         .'<p><strong>Total:</strong> '.$h($totalText).'</p>'
+        .'<p><strong>Modo de pago:</strong> '.$h($modoPagoLabel).'</p>'
         .'<p><strong>Revision:</strong> R'.$revision.'</p>'
         .'<div style="margin:16px 0;padding:12px 14px;border:1px solid #e1c77a;background:#fffaf0;border-radius:6px;">'
         .'<strong>Observaciones para Finanzas</strong><br>'
@@ -829,7 +899,10 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $emailAttachments=array_merge($emailAttachments,$emailInlineAttachments);
 
     $to=ordenes_approver_emails();
-    $cc=array_values(array_filter([$requesterEmail,'jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx']));
+    $managerEmail=ordenes_requester_manager_email($requesterEmail);
+    $cc=array_values(array_filter([$requesterEmail,$managerEmail,'jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx']));
+    $toLookup=array_fill_keys(array_map('strtolower',$to),true);
+    $cc=array_values(array_unique(array_filter($cc,static fn(string $address):bool=>!isset($toLookup[strtolower($address)]))));
     ordenes_send_message('AUTORIZACION ODC '.$folio.' | '.$proveedor,$html,$to,$cc,$emailAttachments);
 
     ordenes_update_item($itemId,[
@@ -847,6 +920,7 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     return [
         'ok'=>true,
         'recipient'=>implode(', ',$to),
+        'managerCopy'=>$managerEmail,
         'sender'=>'sistemas@juanpablo.com.mx',
         'folio'=>$folio,
         'revision'=>$revision,
@@ -997,6 +1071,7 @@ function ordenes_item_payload(int $itemId): array
         'telefono'=>(string)($get('Telefono')??''),
         'ciudadEstado'=>(string)($get('CiudadEstado')??''),
         'condicionPago'=>(string)($get('CondicionPago')??''),
+        'modoPago'=>(string)($get('ModoPago')??'TRANSFERENCIA'),
         'tiempoEntrega'=>(string)($get('TiempoEntrega')??''),
         'moneda'=>(string)($get('Moneda')??'MXN'),
         'tipoCambio'=>(float)($get('TipoCambio')??1),
@@ -1152,6 +1227,7 @@ function ordenes_load_user_draft(int $itemId,array $user): array
         'telefono'=>(string)($get('Telefono')??''),
         'ciudadEstado'=>(string)($get('CiudadEstado')??''),
         'condicionPago'=>(string)($get('CondicionPago')??''),
+        'modoPago'=>(string)($get('ModoPago')??'TRANSFERENCIA'),
         'tiempoEntrega'=>(string)($get('TiempoEntrega')??''),
         'moneda'=>(string)($get('Moneda')??'MXN'),
         'tipoCambio'=>(float)($get('TipoCambio')??1),
