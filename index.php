@@ -11,6 +11,7 @@ $user = portal_user();
 $name = htmlspecialchars(trim((string)($user['name'] ?? 'Usuario')), ENT_QUOTES, 'UTF-8');
 $email = htmlspecialchars(strtolower(trim((string)($user['email'] ?? ''))), ENT_QUOTES, 'UTF-8');
 $isApprover = ordenes_user_is_approver($user);
+$canViewAllApproved = ordenes_user_can_view_all_approved($user);
 
 $pending = [];
 $approved = [];
@@ -74,7 +75,7 @@ $listTitle = match ($view) {
 };
 
 $listSubtitle = match ($view) {
-    'aprobadas' => count($approved) . ' orden(es) con aprobación final.',
+    'aprobadas' => count($approved) . ' orden(es) con aprobación final' . ($canViewAllApproved ? ' de todos los solicitantes.' : '.'),
     'borradores' => count($drafts) . ' orden(es) por completar o corregir.',
     default => count($pending) . ' orden(es) en seguimiento.',
 };
@@ -143,7 +144,7 @@ $listSubtitle = match ($view) {
 
     <a class="odc-menu-card <?= $view === 'aprobadas' ? 'active' : '' ?>" href="?view=aprobadas">
       <span class="odc-menu-icon">✓</span>
-      <div><strong>Órdenes aprobadas</strong><span><b><?= count($approved) ?></b> con aprobación final.</span></div>
+      <div><strong>Órdenes aprobadas</strong><span><b><?= count($approved) ?></b> con aprobación final<?= $canViewAllApproved ? ' de todos los solicitantes.' : '.' ?></span></div>
     </a>
 
     <?php if ($isApprover): ?>
