@@ -288,8 +288,9 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
     odc_pdf_text($s,$left,$bottom-68,'NOMBRE:',7,false);
     odc_pdf_fit_text($s,95,$bottom-68,trim((string)($user['name']??'')),240,8,4.5,true);
     odc_pdf_line($s,94,$bottom-71,340,$bottom-71);
-    odc_pdf_text($s,$left,$bottom-89,'PUESTO:',7,false); odc_pdf_line($s,94,$bottom-92,340,$bottom-92);
-    odc_pdf_text($s,$left,$bottom-110,'FIRMA:',7,false); odc_pdf_line($s,94,$bottom-113,340,$bottom-113);
+    odc_pdf_text($s,$left,$bottom-89,'PUESTO:',7,false);
+    odc_pdf_fit_text($s,95,$bottom-89,trim((string)($user['jobTitle']??($d['solicitantePuesto']??''))),240,8,4.5,true);
+    odc_pdf_line($s,94,$bottom-92,340,$bottom-92);
 
     $subtotal=(float)($d['subtotal']??0);
     $iva=(float)($d['iva']??0);

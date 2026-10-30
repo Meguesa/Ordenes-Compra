@@ -885,7 +885,12 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
         .'</div>'
         .'<p><a href="'.$h($reviewUrl).'">Abrir en el Buzon de Ordenes</a></p>';
 
-    $pdf=odc_pdf_generate($input,$user,(string)($_SERVER['DOCUMENT_ROOT']??''));
+    $pdfUser=$user;
+    if(trim((string)($pdfUser['jobTitle']??''))===''){
+        $pdfUser['jobTitle']=trim((string)($input['solicitantePuesto']??''));
+        if($pdfUser['jobTitle']==='') $pdfUser['jobTitle']=ordenes_user_job_title($requesterEmail);
+    }
+    $pdf=odc_pdf_generate($input,$pdfUser,(string)($_SERVER['DOCUMENT_ROOT']??''));
     $emailAttachments=[[
         '@odata.type'=>'#microsoft.graph.fileAttachment',
         'name'=>'ODC_'.$folio.'.pdf',

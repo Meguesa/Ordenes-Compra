@@ -13,7 +13,13 @@ $current=strtolower(trim((string)($user['email']??'')));
 $owner=strtolower(trim((string)($d['solicitanteCorreo']??'')));
 if($current==='' || ($current!==$owner && !ordenes_user_is_approver($user))){http_response_code(403);exit('Acceso restringido.');}
 
-$pdf=odc_pdf_generate($d,['name'=>$d['solicitanteNombre'],'email'=>$owner],(string)($_SERVER['DOCUMENT_ROOT']??''));
+$jobTitle=trim((string)($d['solicitantePuesto']??''));
+if($jobTitle==='') $jobTitle=ordenes_user_job_title($owner);
+$pdf=odc_pdf_generate(
+    $d,
+    ['name'=>$d['solicitanteNombre'],'email'=>$owner,'jobTitle'=>$jobTitle],
+    (string)($_SERVER['DOCUMENT_ROOT']??'')
+);
 header('Content-Type: application/pdf');
 header('Content-Disposition: inline; filename="ODC_'.preg_replace('/[^0-9A-Za-z_-]/','',(string)$d['folio']).'.pdf"');
 header('Content-Length: '.strlen($pdf));
