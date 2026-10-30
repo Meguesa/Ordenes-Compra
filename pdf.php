@@ -14,7 +14,6 @@ $owner=strtolower(trim((string)($d['solicitanteCorreo']??'')));
 if($current==='' || ($current!==$owner && !ordenes_user_is_approver($user))){http_response_code(403);exit('Acceso restringido.');}
 
 $jobTitle=trim((string)($d['solicitantePuesto']??''));
-if($jobTitle==='') $jobTitle=ordenes_user_job_title($owner);
 $pdf=odc_pdf_generate(
     $d,
     ['name'=>$d['solicitanteNombre'],'email'=>$owner,'jobTitle'=>$jobTitle],
