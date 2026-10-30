@@ -97,6 +97,64 @@ function odc_pdf_fit_text(string &$s,float $x,float $y,string $text,float $maxWi
     if($line2!=='') odc_pdf_text($s,$x,$y-3.2,$line2,$size,$bold);
 }
 
+/** @return string[] */
+function odc_pdf_wrap_lines(string $text,float $maxWidth,float $size=6.6): array
+{
+    $text=trim(preg_replace('/\s+/u',' ',$text)??$text);
+    if($text==='') return [];
+
+    $words=preg_split('/\s+/u',$text)?:[$text];
+    $lines=[];
+    $current='';
+
+    foreach($words as $word){
+        $candidate=$current===''?$word:$current.' '.$word;
+        if(odc_pdf_estimated_width($candidate,$size)<=$maxWidth){
+            $current=$candidate;
+            continue;
+        }
+
+        if($current!==''){
+            $lines[]=$current;
+            $current='';
+        }
+
+        if(odc_pdf_estimated_width($word,$size)<=$maxWidth){
+            $current=$word;
+            continue;
+        }
+
+        // Si una sola palabra/código es demasiado largo, se divide sin reducir la fuente.
+        $piece='';
+        $chars=preg_split('//u',$word,-1,PREG_SPLIT_NO_EMPTY)?:str_split($word);
+        foreach($chars as $char){
+            $candidatePiece=$piece.$char;
+            if($piece!=='' && odc_pdf_estimated_width($candidatePiece,$size)>$maxWidth){
+                $lines[]=$piece;
+                $piece=$char;
+            }else{
+                $piece=$candidatePiece;
+            }
+        }
+        $current=$piece;
+    }
+
+    if($current!=='') $lines[]=$current;
+    return $lines;
+}
+
+function odc_pdf_multiline_text(string &$s,float $x,float $rowY,float $rowH,array $lines,float $size=6.6,bool $bold=false): void
+{
+    if(!$lines) return;
+    $lineHeight=$size+1.8;
+    $blockHeight=count($lines)*$lineHeight;
+    $firstBaseline=$rowY+($rowH+$blockHeight)/2-$lineHeight+1.0;
+
+    foreach($lines as $i=>$line){
+        odc_pdf_text($s,$x,$firstBaseline-$i*$lineHeight,(string)$line,$size,$bold);
+    }
+}
+
 function odc_pdf_date(string $date): string
 {
     if(preg_match('/^(\d{4})-(\d{2})-(\d{2})$/',$date,$m)) return $m[3].'/'.$m[2].'/'.$m[1];
@@ -168,20 +226,62 @@ function odc_pdf_generate(array $d,array $user,string $documentRoot): string
     odc_pdf_text($s,402,$tableTop-19,'UNITARIO',6,true);
     odc_pdf_text($s,505,$tableTop-16,'IMPORTE',7,true);
 
-    $items=is_array($d['items']??null)?$d['items']:[]; $rowsCount=10;
-    for($i=0;$i<$rowsCount;$i++){
-        $y=$tableTop-$hh-$ih*($i+1); $x=$left;
-        foreach($ic as $w){ odc_pdf_box($s,$x,$y,$w,$ih,false); $x+=$w; }
-        if(!isset($items[$i])||!is_array($items[$i])) continue;
-        $it=$items[$i]; $qty=(float)($it['qty']??0); $price=(float)($it['price']??0);
-        $amount=(float)($it['amount']??($qty*$price));
-        odc_pdf_text($s,92,$y+8,$qty==(int)$qty?(string)(int)$qty:number_format($qty,2,'.',''),7,false);
-        odc_pdf_fit_text($s,137,$y+8,(string)($it['description']??''),$ic[1]-10,6.6,3.2,false);
-        odc_pdf_text($s,410,$y+8,odc_pdf_money($price,$currency),7,false);
-        odc_pdf_text($s,505,$y+8,odc_pdf_money($amount,$currency),7,false);
+    $items=array_values(array_filter(
+        is_array($d['items']??null)?$d['items']:[],
+        static fn($row):bool=>is_array($row)
+    ));
+    $descriptionWidth=$ic[1]-10;
+    $descriptionSize=6.6;
+    $lineHeight=$descriptionSize+1.8;
+    $rowSpecs=[];
+    $usedHeight=0.0;
+
+    foreach($items as $it){
+        $lines=odc_pdf_wrap_lines((string)($it['description']??''),$descriptionWidth,$descriptionSize);
+        if(!$lines) $lines=[''];
+        $rowH=max($ih,count($lines)*$lineHeight+7.0);
+        $rowSpecs[]=['item'=>$it,'lines'=>$lines,'height'=>$rowH];
+        $usedHeight+=$rowH;
     }
 
-    $bottom=$tableTop-$hh-$ih*$rowsCount;
+    // El formato tradicional reserva aprox. 10 filas. Las filas largas consumen
+    // primero ese espacio para no empujar innecesariamente el resto del PDF.
+    $targetBodyHeight=$ih*10;
+    while($usedHeight+$ih<=$targetBodyHeight+0.01){
+        $rowSpecs[]=['item'=>null,'lines'=>[],'height'=>$ih];
+        $usedHeight+=$ih;
+    }
+    if($usedHeight<$targetBodyHeight){
+        $remaining=$targetBodyHeight-$usedHeight;
+        if($remaining>=10){
+            $rowSpecs[]=['item'=>null,'lines'=>[],'height'=>$remaining];
+            $usedHeight+=$remaining;
+        }
+    }
+
+    $cursorY=$tableTop-$hh;
+    foreach($rowSpecs as $spec){
+        $rowH=(float)$spec['height'];
+        $y=$cursorY-$rowH;
+        $x=$left;
+        foreach($ic as $w){ odc_pdf_box($s,$x,$y,$w,$rowH,false); $x+=$w; }
+
+        $it=$spec['item'];
+        if(is_array($it)){
+            $qty=(float)($it['qty']??0);
+            $price=(float)($it['price']??0);
+            $amount=(float)($it['amount']??($qty*$price));
+            $baseline=$y+($rowH/2)-2.5;
+            odc_pdf_text($s,92,$baseline,$qty==(int)$qty?(string)(int)$qty:number_format($qty,2,'.',''),7,false);
+            odc_pdf_multiline_text($s,137,$y,$rowH,(array)$spec['lines'],$descriptionSize,false);
+            odc_pdf_text($s,410,$baseline,odc_pdf_money($price,$currency),7,false);
+            odc_pdf_text($s,505,$baseline,odc_pdf_money($amount,$currency),7,false);
+        }
+
+        $cursorY=$y;
+    }
+
+    $bottom=$cursorY;
     odc_pdf_box($s,$left,$bottom-24,300,24,true);
     odc_pdf_text($s,70,$bottom-15,'FAVOR DE CONFIRMAR RECEPCION DE OC',9,true);
     odc_pdf_text($s,$left,$bottom-46,'CONFIRMACION DE REQUISICION',8,false);
