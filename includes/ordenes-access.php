@@ -250,6 +250,7 @@ function ordenes_all_approved_viewer_emails(): array
 {
     return [
         'finanzas@juanpablo.com.mx',
+        'admin.gerencia@juanpablo.com.mx',
     ];
 }
 
