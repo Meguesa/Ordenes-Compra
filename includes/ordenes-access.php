@@ -246,6 +246,20 @@ function ordenes_approver_access_emails(): array
     ];
 }
 
+function ordenes_all_approved_viewer_emails(): array
+{
+    return [
+        'finanzas@juanpablo.com.mx',
+    ];
+}
+
+function ordenes_user_can_view_all_approved(?array $user=null): bool
+{
+    $user=$user??portal_user();
+    $email=strtolower(trim((string)($user['email']??'')));
+    return $email!=='' && in_array($email,ordenes_all_approved_viewer_emails(),true);
+}
+
 function ordenes_user_is_approver(?array $user=null): bool
 {
     $user=$user??portal_user();
@@ -861,12 +875,17 @@ function ordenes_list_user_records(array $user,string $estado): array
         }
     }
 
-    $filter=$emailField." eq '".str_replace("'","''",$email)."' and ".$estadoField." eq '".$estado."'";
+    $viewAllApproved=ordenes_user_can_view_all_approved($user) && in_array($estado,['APROBADA','ENVIADA'],true);
+    $filter=$estadoField." eq '".$estado."'";
+    if(!$viewAllApproved){
+        $filter=$emailField." eq '".str_replace("'","''",$email)."' and ".$filter;
+    }
+
     $query=http_build_query([
         '$select'=>implode(',',array_values(array_unique($resolved))),
         '$filter'=>$filter,
         '$orderby'=>'Id desc',
-        '$top'=>'100',
+        '$top'=>$viewAllApproved?'5000':'100',
     ],'','&',PHP_QUERY_RFC3986);
 
     $s=ordenes_session();
