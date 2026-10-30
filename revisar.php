@@ -64,6 +64,7 @@ $pending=strtoupper((string)$d['estado'])==='PENDIENTE_AUTORIZACION';
         <div><span>Solicitante</span><strong><?= htmlspecialchars((string)$d['solicitanteNombre'],ENT_QUOTES,'UTF-8') ?></strong><small><?= htmlspecialchars((string)$d['solicitanteCorreo'],ENT_QUOTES,'UTF-8') ?></small></div>
         <div><span>RFC</span><strong><?= htmlspecialchars((string)$d['rfc'],ENT_QUOTES,'UTF-8') ?></strong></div>
         <div><span>Condición de pago</span><strong><?= htmlspecialchars((string)$d['condicionPago'],ENT_QUOTES,'UTF-8') ?></strong></div>
+        <div><span>Modo de pago</span><strong><?= strtoupper((string)($d['modoPago']??'TRANSFERENCIA'))==='EFECTIVO' ? 'Efectivo' : 'Transferencia bancaria' ?></strong></div>
         <div><span>Subtotal</span><strong>$<?= number_format((float)$d['subtotal'],2,'.',',') ?> <?= htmlspecialchars((string)$d['moneda'],ENT_QUOTES,'UTF-8') ?></strong></div>
         <div>
           <span>Descuento</span>
