@@ -160,6 +160,7 @@ function ordenes_aliases(): array {
       'IVA'=>['IVA'],'RetIsrPct'=>['RetIsrPct'],'RetencionISR'=>['RetencionISR','Retencion ISR'],'RetIvaPct'=>['RetIvaPct'],
       'RetencionIVA'=>['RetencionIVA','Retencion IVA'],'Total'=>['Total'],'Banco'=>['Banco'],'Cuenta'=>['Cuenta'],'CLABE'=>['CLABE'],
       'SolicitanteNombre'=>['SolicitanteNombre','Solicitante Nombre'],'SolicitanteCorreo'=>['SolicitanteCorreo','Solicitante Correo'],
+      'SolicitantePuesto'=>['SolicitantePuesto','Solicitante Puesto','Puesto Solicitante'],
       'Estado'=>['Estado','Estatus'],'Ambiente'=>['Ambiente'],
       'Revision'=>['Revision'],
       'HistorialAutorizacion'=>['HistorialAutorizacion','Historial Autorizacion'],
@@ -172,7 +173,7 @@ function ordenes_aliases(): array {
 }
 
 function ordenes_schema(): array {
-    $text=['Folio','EmpresaCompradora','Proveedor','Domicilio','RFC','Telefono','CiudadEstado','CondicionPago','ModoPago','TiempoEntrega','Moneda','Banco','Cuenta','CLABE','SolicitanteNombre','SolicitanteCorreo','Estado','Ambiente','UltimaRevisionPor','UltimaRevisionCorreo'];
+    $text=['Folio','EmpresaCompradora','Proveedor','Domicilio','RFC','Telefono','CiudadEstado','CondicionPago','ModoPago','TiempoEntrega','Moneda','Banco','Cuenta','CLABE','SolicitanteNombre','SolicitanteCorreo','SolicitantePuesto','Estado','Ambiente','UltimaRevisionPor','UltimaRevisionCorreo'];
     $num=['TipoCambio','Subtotal','IvaPct','IVA','RetIsrPct','RetencionISR','RetIvaPct','RetencionIVA','Total','Revision'];
     $out=['Fecha'=>'DateTime','FechaEnvioAutorizacion'=>'DateTime','FechaResolucion'=>'DateTime','PartidasJson'=>'Note','HistorialAutorizacion'=>'Note','UltimoComentario'=>'Note']; foreach($text as $x)$out[$x]='Text'; foreach($num as $x)$out[$x]='Number'; return $out;
 }
@@ -402,7 +403,10 @@ function ordenes_num_value(mixed $value): float
 
 function ordenes_save_draft_payload(array $input, array $user): array
 {
-    ordenes_ensure_schema_fields(['ModoPago'],'guardar el modo de pago');
+    ordenes_ensure_schema_fields(
+        ['ModoPago','CiudadEstado','SolicitantePuesto'],
+        'guardar los datos completos de la ODC'
+    );
 
     $missingSchema = ordenes_missing_schema_fields();
     $missingRequired = array_values(array_intersect($missingSchema, ordenes_required_schema_fields()));
@@ -413,6 +417,8 @@ function ordenes_save_draft_payload(array $input, array $user): array
     $userName = trim((string)($user['name'] ?? 'Usuario'));
     $userEmail = strtolower(trim((string)($user['email'] ?? '')));
     if ($userEmail === '') throw new RuntimeException('La sesion no contiene correo electronico.');
+    $userJobTitle = trim((string)($user['jobTitle'] ?? ''));
+    if ($userJobTitle === '') $userJobTitle = ordenes_user_job_title($userEmail);
 
     $proveedor = trim((string)($input['proveedor'] ?? ''));
     $rfc = strtoupper(trim((string)($input['rfc'] ?? '')));
@@ -510,6 +516,7 @@ function ordenes_save_draft_payload(array $input, array $user): array
         'CLABE' => $modoPago === 'EFECTIVO' ? '' : trim((string)($input['clabe'] ?? '')),
         'SolicitanteNombre' => $userName,
         'SolicitanteCorreo' => $userEmail,
+        'SolicitantePuesto' => $userJobTitle,
         'Estado' => 'BORRADOR',
         'Ambiente' => 'PRODUCCION',
     ];
@@ -630,6 +637,29 @@ function ordenes_graph_get_json(string $url,string $token): array
         throw new RuntimeException('Microsoft Graph respondio HTTP '.$status.($detail!==''?': '.$detail:'.'));
     }
     return is_array($data)?$data:[];
+}
+
+function ordenes_user_job_title(string $email): string
+{
+    static $cache=[];
+
+    $email=strtolower(trim($email));
+    if($email==='' || !filter_var($email,FILTER_VALIDATE_EMAIL)) return '';
+    if(array_key_exists($email,$cache)) return (string)$cache[$email];
+
+    try{
+        $token=ordenes_mail_graph_token();
+        $url='https://graph.microsoft.com/v1.0/users/'.rawurlencode($email).'?'
+            .http_build_query(['$select'=>'displayName,jobTitle,mail,userPrincipalName'],'','&',PHP_QUERY_RFC3986);
+        $profile=ordenes_graph_get_json($url,$token);
+        $title=trim((string)($profile['jobTitle']??''));
+        $cache[$email]=$title;
+        return $title;
+    }catch(Throwable $error){
+        error_log('ODC jobTitle lookup para '.$email.': '.$error->getMessage());
+        $cache[$email]='';
+        return '';
+    }
 }
 
 function ordenes_requester_manager_email(string $requesterEmail): string
@@ -1093,6 +1123,7 @@ function ordenes_item_payload(int $itemId): array
         'clabe'=>(string)($get('CLABE')??''),
         'solicitanteNombre'=>(string)($get('SolicitanteNombre')??''),
         'solicitanteCorreo'=>(string)($get('SolicitanteCorreo')??''),
+        'solicitantePuesto'=>(string)($get('SolicitantePuesto')??''),
         'estado'=>(string)($get('Estado')??''),
         'revision'=>(int)($get('Revision')??0),
         'ultimoComentario'=>(string)($get('UltimoComentario')??''),
@@ -1144,7 +1175,13 @@ function ordenes_process_authorization(int $itemId,array $user,string $action,st
 
     $attachments=[];
     if($action!=='COMENTARIO'){
-        $pdf=odc_pdf_generate($payload,['name'=>$payload['solicitanteNombre'],'email'=>$requester],(string)($_SERVER['DOCUMENT_ROOT']??''));
+        $requesterJobTitle=trim((string)($payload['solicitantePuesto']??''));
+        if($requesterJobTitle==='') $requesterJobTitle=ordenes_user_job_title($requester);
+        $pdf=odc_pdf_generate(
+            $payload,
+            ['name'=>$payload['solicitanteNombre'],'email'=>$requester,'jobTitle'=>$requesterJobTitle],
+            (string)($_SERVER['DOCUMENT_ROOT']??'')
+        );
         $attachments[]=[
             '@odata.type'=>'#microsoft.graph.fileAttachment',
             'name'=>'ODC_'.$folio.'.pdf',
