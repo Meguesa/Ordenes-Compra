@@ -18,6 +18,18 @@ $approved = [];
 $drafts = [];
 $inbox = [];
 $listError = '';
+$deleteMessage = '';
+$deleteError = '';
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['form_action'] ?? '') === 'delete_draft') {
+    try {
+        $itemId = (int)($_POST['item_id'] ?? 0);
+        $result = ordenes_delete_user_draft($itemId, $user);
+        $deleteMessage = 'Borrador ' . ((string)($result['folio'] ?? '') !== '' ? (string)$result['folio'] : '#' . $itemId) . ' eliminado correctamente.';
+    } catch (Throwable $error) {
+        $deleteError = $error->getMessage();
+    }
+}
 
 try {
     $pending = ordenes_list_user_records($user, 'PENDIENTE_AUTORIZACION');
@@ -115,6 +127,12 @@ $listSubtitle = match ($view) {
 </header>
 
 <main class="shell odc-menu-main">
+  <?php if ($deleteMessage !== ''): ?>
+    <div class="records-message success" role="status"><?= htmlspecialchars($deleteMessage, ENT_QUOTES, 'UTF-8') ?></div>
+  <?php endif; ?>
+  <?php if ($deleteError !== ''): ?>
+    <div class="records-message error" role="alert"><?= htmlspecialchars($deleteError, ENT_QUOTES, 'UTF-8') ?></div>
+  <?php endif; ?>
   <?php if ($sentFolio !== ''): ?>
     <div class="records-message success odc-send-success" role="status">
       <strong>ODC <?= htmlspecialchars($sentFolio, ENT_QUOTES, 'UTF-8') ?> enviada a autorización correctamente.</strong>
@@ -190,6 +208,13 @@ $listSubtitle = match ($view) {
           <div class="odc-home-action">
             <?php if (in_array($state, ['BORRADOR', 'RECHAZADA'], true)): ?>
               <a class="odc-row-button" href="nueva.php?draft=<?= $id ?>"><?= $state === 'RECHAZADA' ? 'Corregir' : 'Continuar' ?></a>
+              <?php if ($state === 'BORRADOR'): ?>
+                <form method="post" class="odc-delete-form" onsubmit="return confirm('¿Eliminar este borrador? Esta acción no se puede deshacer.');">
+                  <input type="hidden" name="form_action" value="delete_draft">
+                  <input type="hidden" name="item_id" value="<?= $id ?>">
+                  <button type="submit" class="odc-row-button odc-row-button-danger">Eliminar</button>
+                </form>
+              <?php endif; ?>
             <?php else: ?>
               <a class="odc-row-button" target="_blank" href="pdf.php?id=<?= $id ?>">Ver PDF</a>
             <?php endif; ?>
