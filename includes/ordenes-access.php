@@ -632,6 +632,23 @@ function ordenes_graph_get_json(string $url,string $token): array
     return is_array($data)?$data:[];
 }
 
+function ordenes_user_job_title(string $email): string
+{
+    $email=strtolower(trim($email));
+    if($email==='' || !filter_var($email,FILTER_VALIDATE_EMAIL)) return '';
+
+    try{
+        $token=ordenes_mail_graph_token();
+        $url='https://graph.microsoft.com/v1.0/users/'.rawurlencode($email).'?'
+            .http_build_query(['$select'=>'jobTitle'],'','&',PHP_QUERY_RFC3986);
+        $profile=ordenes_graph_get_json($url,$token);
+        return trim((string)($profile['jobTitle']??''));
+    }catch(Throwable $error){
+        error_log('ODC jobTitle lookup para '.$email.': '.$error->getMessage());
+        return '';
+    }
+}
+
 function ordenes_requester_manager_email(string $requesterEmail): string
 {
     $requesterEmail=strtolower(trim($requesterEmail));
