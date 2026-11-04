@@ -333,6 +333,50 @@ function ordenes_update_item(int $id,array $values): void {
     ],$json);
 }
 
+function ordenes_delete_item(int $id): void
+{
+    if($id<=0) throw new InvalidArgumentException('ID invalido.');
+    $s=ordenes_session();
+    ordenes_http_raw(ordenes_list_base().'/items('.$id.')','POST',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+        'IF-MATCH: *',
+        'X-HTTP-Method: DELETE',
+    ],'');
+}
+
+function ordenes_delete_user_draft(int $itemId,array $user): array
+{
+    if($itemId<=0) throw new InvalidArgumentException('Borrador invalido.');
+
+    $email=strtolower(trim((string)($user['email']??'')));
+    if($email==='') throw new RuntimeException('La sesion no contiene correo electronico.');
+
+    $item=ordenes_get_item($itemId);
+    $ownerField=ordenes_field('SolicitanteCorreo');
+    $stateField=ordenes_field('Estado');
+    $folioField=ordenes_field('Folio');
+
+    $owner=$ownerField!==null?strtolower(trim((string)($item[$ownerField]??''))):'';
+    $state=$stateField!==null?strtoupper(trim((string)($item[$stateField]??''))):'';
+    $folio=$folioField!==null?trim((string)($item[$folioField]??'')):'';
+
+    if($owner==='' || $owner!==$email) {
+        throw new RuntimeException('No tienes permiso para eliminar este borrador.');
+    }
+    if($state!=='BORRADOR') {
+        throw new RuntimeException('Solo se pueden eliminar ordenes que permanezcan en estado BORRADOR.');
+    }
+
+    ordenes_delete_item($itemId);
+
+    return [
+        'ok'=>true,
+        'itemId'=>$itemId,
+        'folio'=>$folio,
+    ];
+}
+
 
 function ordenes_sharepoint_delete_attachment(int $itemId,string $name): void
 {
