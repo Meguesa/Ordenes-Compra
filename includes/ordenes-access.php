@@ -339,7 +339,9 @@ function ordenes_sharepoint_delete_attachment(int $itemId,string $name): void
     if($itemId<=0 || trim($name)==='') return;
     $s=ordenes_session();
     $safe=str_replace("'","''",basename($name));
-    $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles/getByFileName('".$safe."')";
+    $encodedName=rawurlencode($safe);
+    $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles/getByFileName('".$encodedName."')";
+
     try{
         ordenes_http_raw($url,'POST',[
             'Authorization: Bearer '.$s['token'],
@@ -347,7 +349,16 @@ function ordenes_sharepoint_delete_attachment(int $itemId,string $name): void
             'IF-MATCH: *',
             'X-HTTP-Method: DELETE',
         ],'');
-    }catch(Throwable $e){}
+    }catch(Throwable $e){
+        // Si el archivo no existe, no hay nada que reemplazar. Cualquier otro
+        // error debe propagarse para evitar intentar agregar un duplicado.
+        if(str_contains($e->getMessage(),'HTTP 404')) return;
+        throw new RuntimeException(
+            'No fue posible reemplazar el archivo adjunto "'.basename($name).'": '.$e->getMessage(),
+            0,
+            $e
+        );
+    }
 }
 
 function ordenes_sharepoint_add_attachment(int $itemId,string $name,string $bytes,string $mime='application/octet-stream'): void
