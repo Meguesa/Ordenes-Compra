@@ -475,7 +475,8 @@ button{cursor:pointer}
 .odc-status-badge.approved{background:#eaf6ee;color:#176d3e}
 .odc-status-badge.rejected{background:#fff0ee;color:#9c2f28}
 .odc-status-badge.draft{background:#fff1c9;color:#765700}
-.odc-home-action{display:flex;justify-content:flex-end}
+.odc-home-action{display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.odc-delete-form{margin:0}
 .odc-row-button{
   display:inline-flex;
   align-items:center;
@@ -495,6 +496,18 @@ button{cursor:pointer}
   background:#184c75;
   border-color:#184c75;
   outline:3px solid rgba(34,91,138,.16);
+  outline-offset:2px;
+}
+.odc-row-button-danger{
+  background:#fff;
+  color:#9c2f28;
+  border-color:#c65a52;
+}
+.odc-row-button-danger:hover,.odc-row-button-danger:focus-visible{
+  background:#fff0ee;
+  color:#7d241f;
+  border-color:#9c2f28;
+  outline:3px solid rgba(156,47,40,.14);
   outline-offset:2px;
 }
 .odc-row-comment{
@@ -518,6 +531,7 @@ button{cursor:pointer}
   .odc-intro-card{align-items:flex-start}
   .odc-home-action{grid-column:1/-1;justify-content:stretch}
   .odc-row-button{width:100%}
+  .odc-delete-form{flex:1}
 }
 @media(max-width:560px){
   .odc-menu-main{padding-top:18px}
