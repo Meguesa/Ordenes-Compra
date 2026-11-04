@@ -704,18 +704,40 @@ function ordenes_user_job_title(string $email): string
     }
 }
 
+/**
+ * Destinatario de copia de la gerencia solicitante.
+ *
+ * Las cuentas de Marketing incluyen usuarios sin Manager legible en Entra
+ * (y una cuenta externa), por lo que no pueden depender de /users/{id}/manager.
+ * La asignacion explicita tiene prioridad; otras areas conservan el lookup
+ * de Manager en Microsoft 365.
+ */
 function ordenes_requester_manager_email(string $requesterEmail): string
 {
     $requesterEmail=strtolower(trim($requesterEmail));
     if($requesterEmail==='' || !filter_var($requesterEmail,FILTER_VALIDATE_EMAIL)) return '';
+
+    $areaManagerByRequester=[
+        // Marketing: America Gomez (marketing@juanpablo.com.mx).
+        'diseno@juanpablo.com.mx'=>'marketing@juanpablo.com.mx',
+        'elizabeth.lgzz@gmail.com'=>'marketing@juanpablo.com.mx',
+    ];
+
+    if(isset($areaManagerByRequester[$requesterEmail])) {
+        $managerEmail=$areaManagerByRequester[$requesterEmail];
+        return $managerEmail!==$requesterEmail ? $managerEmail : '';
+    }
 
     try{
         $token=ordenes_mail_graph_token();
         $url='https://graph.microsoft.com/v1.0/users/'.rawurlencode($requesterEmail).'/manager?'
             .http_build_query(['$select'=>'displayName,mail,userPrincipalName'],'','&',PHP_QUERY_RFC3986);
         $manager=ordenes_graph_get_json($url,$token);
-        $email=strtolower(trim((string)($manager['mail']??$manager['userPrincipalName']??'')));
-        if($email==='' || !filter_var($email,FILTER_VALIDATE_EMAIL) || $email===$requesterEmail) return '';
+        $email=strtolower(trim((string)($manager['mail']??'')));
+        if(!filter_var($email,FILTER_VALIDATE_EMAIL)){
+            $email=strtolower(trim((string)($manager['userPrincipalName']??'')));
+        }
+        if(!filter_var($email,FILTER_VALIDATE_EMAIL) || $email===$requesterEmail) return '';
         return $email;
     }catch(Throwable $error){
         error_log('ODC manager lookup para '.$requesterEmail.': '.$error->getMessage());
@@ -980,6 +1002,13 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $cc=array_values(array_filter([$requesterEmail,$managerEmail,'jose.santana@juanpablo.com.mx','gabriel.guerra@juanpablo.com.mx']));
     $toLookup=array_fill_keys(array_map('strtolower',$to),true);
     $cc=array_values(array_unique(array_filter($cc,static fn(string $address):bool=>!isset($toLookup[strtolower($address)]))));
+
+    // Dejar constancia verificable de los destinatarios en la revision enviada.
+    // Evita que una copia omitida pase desapercibida durante la auditoria.
+    $history[count($history)-1]['destinatariosAutorizacion']=$to;
+    $history[count($history)-1]['correosCopia']=$cc;
+    $history[count($history)-1]['gerenteAreaCorreo']=$managerEmail;
+
     ordenes_send_message('AUTORIZACION ODC '.$folio.' | '.$proveedor,$html,$to,$cc,$emailAttachments);
 
     ordenes_update_item($itemId,[
