@@ -672,6 +672,6 @@ window.ODC_CONTEXT = <?= json_encode([
     'initialDraft' => is_array($initialDraft) ? $initialDraft : null,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 </script>
-<script src="assets/js/app.js?v=20261030-modo-pago-manager-1"></script>
+<script src="assets/js/app.js?v=20261105-borrador-sesion-1"></script>
 </body>
 </html>
