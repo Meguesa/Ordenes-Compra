@@ -71,6 +71,9 @@ if (!$prototypeMode && isset($_GET['draft'])) {
 }
 
 if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (string)($_POST['form_action'] ?? '') === 'save_draft') {
+    $saveWantsJson = str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json')
+        || strtolower(trim((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''))) === 'xmlhttprequest';
+
     try {
         $expected = (string)($_SESSION['ordenes_csrf'] ?? '');
         $received = (string)($_POST['csrf_token'] ?? '');
@@ -87,6 +90,28 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
         $saveResult = ordenes_save_draft_payload($input, $user);
     } catch (Throwable $error) {
         $saveError = $error->getMessage();
+    }
+
+    // El formulario tradicional sigue funcionando como antes. Para las
+    // solicitudes AJAX respondemos JSON sin cambiar la logica del guardado.
+    if ($saveWantsJson) {
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+
+        if ($saveError !== '' || !is_array($saveResult)) {
+            $requestId = bin2hex(random_bytes(4));
+            error_log('ODC borrador ' . $requestId . ': ' . $saveError);
+            http_response_code(400);
+            echo json_encode([
+                'ok' => false,
+                'error' => $saveError !== '' ? $saveError : 'No fue posible guardar el borrador.',
+                'requestId' => $requestId,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } else {
+            echo json_encode($saveResult, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        exit;
     }
 }
 
