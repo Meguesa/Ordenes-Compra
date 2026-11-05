@@ -267,6 +267,28 @@
     }
   }
 
+  async function parseSaveResponse(response) {
+    const raw = await response.text();
+    let result = null;
+    try { result = raw ? JSON.parse(raw) : null; } catch (_) {}
+
+    if (!response.ok || !result?.ok) {
+      const requestId = result?.requestId ? ` (referencia ${result.requestId})` : '';
+      if (response.status === 401 || result?.code === 'SESSION_EXPIRED'
+          || (response.redirected && /\/login\.php(?:[?#]|$)/i.test(response.url))) {
+        throw new Error('La sesión del Portal expiró. Vuelve a iniciar sesión y abre Órdenes de Compra; la captura se conserva en este navegador.');
+      }
+      if (result?.error) throw new Error(String(result.error) + requestId);
+      if (response.status === 403) throw new Error('El servidor rechazó la petición (HTTP 403). Actualiza la sesión del Portal y vuelve a intentarlo.');
+      if (response.status === 413) throw new Error('El servidor rechazó el tamaño de la petición (HTTP 413).');
+      if (response.status === 429) throw new Error('El servidor limitó temporalmente las solicitudes (HTTP 429).');
+      const contentType = response.headers.get('Content-Type') || '';
+      const kind = /html/i.test(contentType) || /^\s*</.test(raw) ? 'HTML' : (raw.trim() ? 'no JSON' : 'vacía');
+      throw new Error(`El servidor respondió HTTP ${response.status} con una respuesta ${kind}; no se pudo confirmar el guardado. Se conserva la captura local.`);
+    }
+    return result;
+  }
+
   function utf8ToBase64(value) {
     const bytes = new TextEncoder().encode(value);
     let binary = '';
@@ -306,10 +328,7 @@
         body: JSON.stringify(data)
       });
 
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.ok) {
-        throw new Error(result.error || 'No fue posible guardar el borrador.');
-      }
+      const result = await parseSaveResponse(response);
 
       context.itemId = Number(result.itemId || 0);
       context.folio = String(result.folio || '');
@@ -397,10 +416,7 @@
         body: JSON.stringify(data)
       });
 
-      const saveResult = await saveResponse.json().catch(() => ({}));
-      if (!saveResponse.ok || !saveResult.ok) {
-        throw new Error(saveResult.error || 'No fue posible guardar la ODC antes de enviarla.');
-      }
+      const saveResult = await parseSaveResponse(saveResponse);
 
       context.itemId = Number(saveResult.itemId || 0);
       context.folio = String(saveResult.folio || '');
