@@ -8,6 +8,32 @@ $prototypeMode = !is_file($bootstrap);
 
 if (!$prototypeMode) {
     require_once $bootstrap;
+
+    // Las peticiones del formulario esperan JSON. Si la sesion del Portal
+    // expira, no redirigir silenciosamente el fetch a login.php (HTML):
+    // responder 401 para permitir recuperar la captura local sin perderla.
+    $odcExpectsJson = isset($_GET['action'])
+        || (
+            ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+            && (
+                str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json')
+                || strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+            )
+        );
+    if ($odcExpectsJson && !portal_is_authenticated()) {
+        $_SESSION['return_to'] = '/ordenes-compra/nueva.php';
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+        http_response_code(401);
+        echo json_encode([
+            'ok' => false,
+            'code' => 'SESSION_EXPIRED',
+            'error' => 'La sesion del Portal expiro. Inicia sesion de nuevo y regresa a Ordenes de Compra. La captura se conserva localmente en este navegador.',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
     portal_require_authentication();
     require_once __DIR__ . '/includes/ordenes-access.php';
     ordenes_require_preview_access();
@@ -278,10 +304,13 @@ if (!$prototypeMode && isset($_GET['action'])) {
 
         throw new RuntimeException('Accion no reconocida.');
     } catch (Throwable $error) {
+        $requestId = bin2hex(random_bytes(4));
+        error_log('ODC solicitud ' . $requestId . ' accion=' . (string)($_GET['action'] ?? 'desconocida') . ': ' . $error->getMessage());
         http_response_code(400);
         echo json_encode([
             'ok' => false,
             'error' => $error->getMessage(),
+            'requestId' => $requestId,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
