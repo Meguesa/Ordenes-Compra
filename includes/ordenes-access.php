@@ -378,31 +378,47 @@ function ordenes_delete_user_draft(int $itemId,array $user): array
 }
 
 
-function ordenes_sharepoint_delete_attachment(int $itemId,string $name): void
+/**
+ * Busca un adjunto por nombre sin hacer solicitudes de borrado a SharePoint.
+ * Devuelve el nombre exacto que reporta SharePoint, o null si no existe.
+ */
+function ordenes_existing_attachment_filename(array $attachments,string $name): ?string
 {
-    if($itemId<=0 || trim($name)==='') return;
-    $s=ordenes_session();
-    $safe=str_replace("'","''",basename($name));
-    $encodedName=rawurlencode($safe);
-    $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles/getByFileName('".$encodedName."')";
+    $requested=basename(trim($name));
+    if($requested==='') return null;
 
-    try{
-        ordenes_http_raw($url,'POST',[
-            'Authorization: Bearer '.$s['token'],
-            'Accept: application/json;odata=nometadata',
-            'IF-MATCH: *',
-            'X-HTTP-Method: DELETE',
-        ],'');
-    }catch(Throwable $e){
-        // Si el archivo no existe, no hay nada que reemplazar. Cualquier otro
-        // error debe propagarse para evitar intentar agregar un duplicado.
-        if(str_contains($e->getMessage(),'HTTP 404')) return;
-        throw new RuntimeException(
-            'No fue posible reemplazar el archivo adjunto "'.basename($name).'": '.$e->getMessage(),
-            0,
-            $e
-        );
+    foreach($attachments as $attachment){
+        if(!is_array($attachment)) continue;
+        $existing=trim((string)($attachment['FileName']??''));
+        if($existing!=='' && strcasecmp($existing,$requested)===0) return $existing;
     }
+    return null;
+}
+
+/**
+ * Actualiza el contenido de un adjunto ya existente, sin eliminarlo primero.
+ * SharePoint REST documenta POST + X-HTTP-Method: PUT sobre /$value.
+ */
+function ordenes_sharepoint_replace_attachment(int $itemId,string $name,string $bytes): void
+{
+    if($itemId<=0) throw new InvalidArgumentException('ID invalido.');
+    $safeName=basename(trim($name));
+    if($safeName==='') throw new InvalidArgumentException('Nombre de archivo invalido.');
+    if($bytes==='') throw new InvalidArgumentException('El archivo adjunto esta vacio.');
+
+    $s=ordenes_session();
+    $odataName=str_replace("'","''",$safeName);
+    $encodedName=rawurlencode($odataName);
+    $url=ordenes_list_base()."/items(".$itemId.")/AttachmentFiles('".$encodedName."')/\$value";
+
+    ordenes_http_raw($url,'POST',[
+        'Authorization: Bearer '.$s['token'],
+        'Accept: application/json;odata=nometadata',
+        'Content-Type: application/octet-stream',
+        'Content-Length: '.strlen($bytes),
+        'IF-MATCH: *',
+        'X-HTTP-Method: PUT',
+    ],$bytes);
 }
 
 function ordenes_sharepoint_add_attachment(int $itemId,string $name,string $bytes,string $mime='application/octet-stream'): void
@@ -924,21 +940,36 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $revision=max(1,$currentRevision+1);
 
     $uploaded=ordenes_prepare_uploaded_attachments($files);
+    // Consultamos los nombres una sola vez. Si no hay archivo previo,
+    // NO intentamos borrarlo: SharePoint puede responder HTTP 400 fileName
+    // ante getByFileName de un adjunto inexistente.
+    $knownAttachments=$uploaded!==[] ? ordenes_sharepoint_attachments($itemId) : [];
     foreach($uploaded as $attachment){
         $original=basename((string)($attachment['name']??'archivo'));
         $stored='R'.$revision.'_'.$original;
-        ordenes_sharepoint_delete_attachment($itemId,$stored);
+        $bytes=base64_decode((string)($attachment['contentBytes']??''),true);
 
         try {
-            ordenes_sharepoint_add_attachment(
-                $itemId,
-                $stored,
-                base64_decode((string)($attachment['contentBytes']??''),true)?:'',
-                (string)($attachment['contentType']??'application/octet-stream')
-            );
+            if($bytes===false || $bytes===''){
+                throw new RuntimeException('El contenido del archivo adjunto no es valido.');
+            }
+            $existingName=ordenes_existing_attachment_filename($knownAttachments,$stored);
+            if($existingName!==null){
+                // Reintento o sustitucion: conservar el adjunto y actualizar
+                // el contenido usando PUT, nunca DELETE + ADD.
+                ordenes_sharepoint_replace_attachment($itemId,$existingName,$bytes);
+            }else{
+                ordenes_sharepoint_add_attachment(
+                    $itemId,
+                    $stored,
+                    $bytes,
+                    (string)($attachment['contentType']??'application/octet-stream')
+                );
+                $knownAttachments[]=['FileName'=>$stored];
+            }
         } catch (Throwable $attachmentError) {
             throw new RuntimeException(
-                'No fue posible adjuntar "'.$original.'" en SharePoint: '.$attachmentError->getMessage(),
+                'No fue posible guardar el adjunto "'.$original.'" en SharePoint: '.$attachmentError->getMessage(),
                 0,
                 $attachmentError
             );
