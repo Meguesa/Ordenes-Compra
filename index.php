@@ -135,7 +135,7 @@ $listSubtitle = match ($view) {
   <?php endif; ?>
   <?php if ($sentFolio !== ''): ?>
     <div class="records-message success odc-send-success" role="status">
-      <strong>ODC <?= htmlspecialchars($sentFolio, ENT_QUOTES, 'UTF-8') ?> enviada a autorización correctamente.</strong>
+      <strong>ODC <?= htmlspecialchars($sentFolio, ENT_QUOTES, 'UTF-8') ?> <?= ($_GET['modificado']??'')==='1'?'modificada y reenviada':'enviada a autorización' ?> correctamente.</strong>
       <span>La orden ya aparece en Órdenes pendientes y fue notificada a los autorizadores.</span>
     </div>
   <?php endif; ?>
@@ -216,6 +216,9 @@ $listSubtitle = match ($view) {
                 </form>
               <?php endif; ?>
             <?php else: ?>
+              <?php if ($state==='PENDIENTE_AUTORIZACION' && strtolower((string)($record['SolicitanteCorreo']??''))===strtolower((string)($user['email']??''))): ?>
+                <a class="odc-row-button" href="nueva.php?edit=<?= $id ?>">Editar</a>
+              <?php endif; ?>
               <a class="odc-row-button" target="_blank" href="pdf.php?id=<?= $id ?>">Ver PDF</a>
             <?php endif; ?>
           </div>

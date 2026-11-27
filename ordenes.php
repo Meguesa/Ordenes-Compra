@@ -62,7 +62,7 @@ function odc_list_date(mixed $v): string {
           <div class="record-field"><span>Total</span><strong>$<?= number_format((float)($r['Total']??0),2,'.',',') ?></strong></div>
           <?php $state=strtoupper((string)($r['Estado']??'ENVIADA')); ?>
           <div class="record-field"><span>Estado</span><strong class="record-badge <?= $state==='APROBADA'||$state==='ENVIADA'?'sent':'pending' ?>"><?= $state==='PENDIENTE_AUTORIZACION'?'Pendiente autorización':($state==='APROBADA'?'Aprobada':'Enviada') ?></strong></div>
-          <div class="record-actions"><a class="secondary-button button-link" target="_blank" href="pdf.php?id=<?= (int)($r['id']??0) ?>">Ver PDF</a></div>
+          <div class="record-actions"><?php if($state==='PENDIENTE_AUTORIZACION' && strtolower((string)($r['SolicitanteCorreo']??''))===strtolower((string)($user['email']??''))): ?><a class="secondary-button button-link" href="nueva.php?edit=<?= (int)($r['id']??0) ?>">Editar</a><?php endif; ?><a class="secondary-button button-link" target="_blank" href="pdf.php?id=<?= (int)($r['id']??0) ?>">Ver PDF</a></div>
         </article>
       <?php endforeach; ?>
       </div>

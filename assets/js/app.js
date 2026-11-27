@@ -162,6 +162,7 @@
     return {
       itemId: Number(context.itemId || 0),
       folio: String(context.folio || ''),
+      ...(context.editMode ? { editRevision: Number(context.initialDraft?.revision || 0) } : {}),
       empresaCompradora: $('empresaCompradora').value,
       fecha: $('fecha').value,
       proveedor: $('proveedor').value.trim(),
@@ -190,6 +191,8 @@
   }
 
   function persistLocal(data) {
+    // No mezclar una orden ya enviada con el borrador local de una orden nueva.
+    if (context.editMode) return false;
     try {
       localStorage.setItem(draftKey(), JSON.stringify(data));
       return true;
@@ -315,6 +318,7 @@
   }
 
   async function saveDraft() {
+    if (context.editMode) return;
     if (!syncDateFromDisplay()) {
       $('fechaDisplay').reportValidity();
       return;
@@ -412,10 +416,11 @@
     $('formStatus').textContent = 'Guardando la ODC en SharePoint…';
 
     try {
-      const saveResult = await saveDraftRequest(data);
-
-      context.itemId = Number(saveResult.itemId || 0);
-      context.folio = String(saveResult.folio || '');
+      if (!context.editMode) {
+        const saveResult = await saveDraftRequest(data);
+        context.itemId = Number(saveResult.itemId || 0);
+        context.folio = String(saveResult.folio || '');
+      }
 
       if (!context.itemId || !context.folio) {
         throw new Error('SharePoint guardó la ODC, pero no devolvió un folio válido.');
@@ -427,7 +432,9 @@
       persistLocal(data);
 
       $('folioDisplay').textContent = context.folio;
-      $('formStatus').textContent = context.folio + ' guardada. Enviando a autorización…';
+      $('formStatus').textContent = context.editMode
+        ? 'Guardando la nueva revisión y reenviando…'
+        : context.folio + ' guardada. Enviando a autorización…';
 
       $('draftPayload').value = utf8ToBase64(JSON.stringify(data));
 
@@ -456,8 +463,8 @@
       }
 
       if (sendResult.mailNonce) $('mailNonce').value = sendResult.mailNonce;
-      $('formStatus').textContent = 'ODC ' + (sendResult.folio || context.folio) + ' enviada a autorización correctamente.';
-      try { localStorage.removeItem(draftKey()); } catch (_) {}
+      $('formStatus').textContent = 'ODC ' + (sendResult.folio || context.folio) + (context.editMode ? ' modificada y reenviada correctamente.' : ' enviada a autorización correctamente.');
+      if (!context.editMode) { try { localStorage.removeItem(draftKey()); } catch (_) {} }
 
       window.location.href = sendResult.redirect || ('/ordenes-compra/?view=pendientes&enviado=' + encodeURIComponent(sendResult.folio || context.folio));
     } catch (error) {
@@ -469,7 +476,7 @@
 
   function populateDraft(data) {
     if (!data || typeof data !== 'object') return;
-    const ids = ['proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','modoPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe','observaciones'];
+    const ids = ['empresaCompradora','proveedor','rfc','telefono','domicilio','ciudadEstado','condicionPago','modoPago','tiempoEntrega','moneda','tipoCambio','banco','cuenta','clabe','observaciones'];
     ids.forEach((id) => {
       if (data[id] !== undefined && $(id)) $(id).value = data[id];
     });
@@ -733,6 +740,7 @@
   }
   if (restored) populateDraft(restored); else addItem();
   syncPaymentMode();
+  if (context.editMode) $('formStatus').textContent = 'Editando ODC ' + context.folio + ' · R' + Number(context.initialDraft?.revision || 0) + '. No se creará otro folio.';
 
   if (context.saveOk && context.folio) {
     const saved = currentData();

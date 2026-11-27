@@ -19,7 +19,7 @@ if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
     if($token===''||!hash_equals((string)$_SESSION['ordenes_auth_csrf'],$token)) throw new RuntimeException('La sesión de seguridad expiró.');
     $action=(string)($_POST['decision']??'');
     $comment=(string)($_POST['comentario']??'');
-    $result=ordenes_process_authorization($id,$user,$action,$comment);
+    $result=ordenes_process_authorization($id,$user,$action,$comment,(int)($_POST['expected_revision']??-1));
     $message='Acción registrada: '.(string)($result['action']??'');
   }catch(Throwable $e){$error=$e->getMessage();}
 }
@@ -34,6 +34,7 @@ try{
 $name=htmlspecialchars(trim((string)($user['name']??'Usuario')),ENT_QUOTES,'UTF-8');
 $email=htmlspecialchars(strtolower(trim((string)($user['email']??''))),ENT_QUOTES,'UTF-8');
 $pending=strtoupper((string)$d['estado'])==='PENDIENTE_AUTORIZACION';
+$mailPending=$pending && ordenes_modification_mail_pending($d['historial'],(int)$d['revision']);
 ?><!doctype html>
 <html lang="es-MX">
 <head>
@@ -103,9 +104,12 @@ $pending=strtoupper((string)$d['estado'])==='PENDIENTE_AUTORIZACION';
 
   <section class="records-panel decision-panel">
     <div class="records-panel-heading"><div><h2>Decisión</h2><p>El rechazo requiere un comentario. Puedes guardar un comentario sin cerrar la solicitud.</p></div></div>
-    <?php if($pending): ?>
+    <?php if($mailPending): ?>
+    <div class="records-message error">La revisión modificada tiene una notificación pendiente. El solicitante debe reenviarla antes de que se pueda autorizar.</div>
+    <?php elseif($pending): ?>
     <form method="post" action="revisar.php?id=<?= $id ?>" class="decision-form">
       <input type="hidden" name="id" value="<?= $id ?>">
+      <input type="hidden" name="expected_revision" value="<?= (int)$d['revision'] ?>">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)$_SESSION['ordenes_auth_csrf'],ENT_QUOTES,'UTF-8') ?>">
       <label>Comentario de revisión
         <textarea name="comentario" rows="5" placeholder="Escribe observaciones para el solicitante..."></textarea>

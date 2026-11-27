@@ -471,7 +471,34 @@ function ordenes_num_value(mixed $value): float
     return is_numeric($value) ? (float)$value : 0.0;
 }
 
+// Serializar escrituras de una ODC dentro del mismo servidor del Portal.
+function ordenes_with_item_lock(int $itemId, callable $operation): mixed
+{
+    if ($itemId <= 0) return $operation();
+    $dir = sys_get_temp_dir().'/jjp-odc-'.hash('sha256', __DIR__);
+    if (!is_dir($dir) && !@mkdir($dir, 0700) && !is_dir($dir)) {
+        throw new RuntimeException('No fue posible preparar el bloqueo de la ODC.');
+    }
+    $handle = @fopen($dir.'/item-'.$itemId.'.lock', 'c');
+    if ($handle === false) throw new RuntimeException('No fue posible bloquear la ODC.');
+    try {
+        if (!flock($handle, LOCK_EX | LOCK_NB)) {
+            throw new RuntimeException('La ODC esta siendo procesada. Actualiza la pagina e intentalo nuevamente.');
+        }
+        return $operation();
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+}
+
 function ordenes_save_draft_payload(array $input, array $user): array
+{
+    return ordenes_with_item_lock((int)($input['itemId'] ?? 0),
+        static fn(): array => ordenes_save_draft_payload_unlocked($input, $user));
+}
+
+function ordenes_save_draft_payload_unlocked(array $input, array $user, bool $validateOnly=false): array
 {
     ordenes_ensure_schema_fields(['ModoPago'],'guardar el modo de pago');
 
@@ -585,11 +612,21 @@ function ordenes_save_draft_payload(array $input, array $user): array
         'Ambiente' => 'PRODUCCION',
     ];
 
+    if ($validateOnly) return ['values'=>$values];
+
     if ($itemId > 0) {
         $existing = ordenes_get_item($itemId);
         $emailField = ordenes_field('SolicitanteCorreo');
         $existingOwner = $emailField !== null ? strtolower(trim((string)($existing[$emailField] ?? ''))) : '';
-        if ($existingOwner !== '' && $existingOwner !== $userEmail) throw new RuntimeException('No tienes permiso para modificar este borrador.');
+        if ($existingOwner !== $userEmail) throw new RuntimeException('No tienes permiso para modificar este borrador.');
+        $stateField = ordenes_field('Estado');
+        $existingState = strtoupper(trim((string)($existing[$stateField] ?? '')));
+        if (!in_array($existingState, ['BORRADOR','RECHAZADA'], true)) {
+            throw new RuntimeException('La ODC ya no es un borrador. Abre la orden desde el listado actualizado.');
+        }
+        $folioField = ordenes_field('Folio');
+        $storedFolio = trim((string)($existing[$folioField] ?? ''));
+        if ($storedFolio !== '') $folio = $storedFolio;
         if ($folio === '' || preg_match('/^ODC-PREVIEW-\\d+$/', $folio) || preg_match('/^0{0,3}[12]$/', $folio)) $folio = str_pad((string)(38 + $itemId), 4, '0', STR_PAD_LEFT);
         $values['Title'] = $folio;
         $values['Folio'] = $folio;
@@ -912,7 +949,23 @@ function ordenes_history_array(array $item): array
     return is_array($decoded)?$decoded:[];
 }
 
+// No autorizar una revision modificada cuya notificacion no se ha confirmado.
+function ordenes_modification_mail_pending(array $history,int $revision): bool
+{
+    foreach (array_reverse($history) as $event) {
+        if (!is_array($event) || (int)($event['revision']??0)!==$revision) continue;
+        if (($event['accion']??'')==='MODIFICADA') return ($event['correoEstado']??'')!=='ENVIADO';
+    }
+    return false;
+}
+
 function ordenes_send_email(array $input,array $user,array $files=[]): array
+{
+    return ordenes_with_item_lock((int)($input['itemId']??0),
+        static fn(): array => ordenes_send_email_unlocked($input,$user,$files));
+}
+
+function ordenes_send_email_unlocked(array $input,array $user,array $files=[]): array
 {
     ordenes_ensure_approval_schema();
 
@@ -927,19 +980,59 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $item=ordenes_get_item($itemId);
     $ownerField=ordenes_field('SolicitanteCorreo');
     $owner=$ownerField!==null?strtolower(trim((string)($item[$ownerField]??''))):'';
-    if($owner!=='' && $owner!==$requesterEmail) throw new RuntimeException('No tienes permiso para enviar esta ODC.');
+    if($requesterEmail==='' || $owner!==$requesterEmail) throw new RuntimeException('No tienes permiso para enviar esta ODC.');
+    $folioField=ordenes_field('Folio');
+    if($folioField===null || $folio!==trim((string)($item[$folioField]??''))) {
+        throw new RuntimeException('El folio de la ODC no coincide con el registro.');
+    }
 
     $stateField=ordenes_field('Estado');
     $state=$stateField!==null?strtoupper(trim((string)($item[$stateField]??''))):'';
-    if(!in_array($state,['BORRADOR','RECHAZADA'],true)) {
+    $revField=ordenes_field('Revision');
+    $currentRevision=$revField!==null?(int)($item[$revField]??0):0;
+    $isEdit=array_key_exists('editRevision',$input);
+    if($isEdit) {
+        if($state!=='PENDIENTE_AUTORIZACION' || (int)$input['editRevision']!==$currentRevision) {
+            throw new RuntimeException('La orden cambio o ya fue resuelta. Actualiza el listado y abre la revision vigente.');
+        }
+    } elseif(!in_array($state,['BORRADOR','RECHAZADA'],true)) {
         throw new RuntimeException('Esta ODC no esta disponible para envio a autorizacion.');
     }
 
-    $revField=ordenes_field('Revision');
-    $currentRevision=$revField!==null?(int)($item[$revField]??0):0;
     $revision=max(1,$currentRevision+1);
-
+    $history=ordenes_history_array($item);
+    $editValues=[];
+    $editFingerprint='';
+    $retryMail=false;
     $uploaded=ordenes_prepare_uploaded_attachments($files);
+    if($isEdit) {
+        // Reutilizar validaciones y calculos del servidor sin convertir la ODC en borrador.
+        $editValues=ordenes_save_draft_payload_unlocked($input,$user,true)['values'];
+        $editValues['Title']=$folio;
+        $editValues['Folio']=$folio;
+        $editValues['Estado']='PENDIENTE_AUTORIZACION';
+        $parts=json_decode($editValues['PartidasJson'],true);
+        $map=['fecha'=>'Fecha','empresaCompradora'=>'EmpresaCompradora','proveedor'=>'Proveedor',
+            'domicilio'=>'Domicilio','rfc'=>'RFC','telefono'=>'Telefono','ciudadEstado'=>'CiudadEstado',
+            'condicionPago'=>'CondicionPago','modoPago'=>'ModoPago','tiempoEntrega'=>'TiempoEntrega',
+            'moneda'=>'Moneda','tipoCambio'=>'TipoCambio','subtotal'=>'Subtotal','ivaPct'=>'IvaPct','iva'=>'IVA',
+            'retIsrPct'=>'RetIsrPct','retIsr'=>'RetencionISR','retIvaPct'=>'RetIvaPct','retIva'=>'RetencionIVA',
+            'total'=>'Total','banco'=>'Banco','cuenta'=>'Cuenta','clabe'=>'CLABE'];
+        foreach($map as $key=>$field) $input[$key]=$editValues[$field];
+        $input['items']=$parts['items'];
+        $input['aplicaDescuento']=$parts['descuento']['aplica'];
+        $input['descuentoTipo']=$parts['descuento']['tipo'];
+        $input['descuentoValor']=$parts['descuento']['valor'];
+        $input['descuento']=$parts['descuento']['monto'];
+        $editFingerprint=hash('sha256',json_encode([$editValues,trim((string)($input['observaciones']??''))],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
+        $last=end($history);
+        // Reintento sin cambios tras fallo de correo: conservar la misma revision.
+        if($uploaded===[] && ordenes_modification_mail_pending($history,$currentRevision)
+            && is_array($last) && ($last['huella']??'')===$editFingerprint) {
+            $retryMail=true;
+            $revision=$currentRevision;
+        }
+    }
     // Consultamos los nombres una sola vez. Si no hay archivo previo,
     // NO intentamos borrarlo: SharePoint puede responder HTTP 400 fileName
     // ante getByFileName de un adjunto inexistente.
@@ -976,15 +1069,21 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
         }
     }
 
-    $history=ordenes_history_array($item);
-    $history[]=[
-        'fecha'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format(DATE_ATOM),
-        'revision'=>$revision,
-        'accion'=>'ENVIADA_AUTORIZACION',
-        'usuario'=>$requesterName,
-        'correo'=>$requesterEmail,
-        'comentario'=>trim((string)($input['observaciones']??'')),
-    ];
+    if(!$retryMail) {
+        $history[]=[
+            'fecha'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format(DATE_ATOM),
+            'revision'=>$revision,
+            'accion'=>$isEdit?'MODIFICADA':'ENVIADA_AUTORIZACION',
+            'usuario'=>$requesterName,
+            'correo'=>$requesterEmail,
+            'comentario'=>trim((string)($input['observaciones']??'')),
+        ];
+        if($isEdit) {
+            $history[count($history)-1]['revisionAnterior']=$currentRevision;
+            $history[count($history)-1]['correoEstado']='PENDIENTE';
+            $history[count($history)-1]['huella']=$editFingerprint;
+        }
+    }
 
     $proveedor=trim((string)($input['proveedor']??''));
     $moneda=strtoupper(trim((string)($input['moneda']??'MXN')));
@@ -998,7 +1097,8 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $h=static fn(string $v):string=>htmlspecialchars($v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
     $observacionesHtml=$observaciones!=='' ? nl2br($h($observaciones)) : '<em>Sin observaciones.</em>';
 
-    $html='<h2>Orden de Compra '.$h($folio).' pendiente de autorizacion</h2>'
+    $html='<h2>'.($isEdit?'MODIFICADO - ':'').'Orden de Compra '.$h($folio).' pendiente de autorizacion</h2>'
+        .($isEdit?'<p><strong>Esta es una modificacion de la misma ODC, no una orden nueva. Sustituye la version anterior. Revisa y autoriza exclusivamente R'.$revision.'.</strong></p>':'')
         .'<p><strong>Solicitante:</strong> '.$h($requesterName).'</p>'
         .'<p><strong>Proveedor:</strong> '.$h($proveedor).'</p>'
         .'<p><strong>Total:</strong> '.$h($totalText).'</p>'
@@ -1018,10 +1118,11 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $pdf=odc_pdf_generate($input,$pdfUser,(string)($_SERVER['DOCUMENT_ROOT']??''));
     $emailAttachments=[[
         '@odata.type'=>'#microsoft.graph.fileAttachment',
-        'name'=>'ODC_'.$folio.'.pdf',
+        'name'=>'ODC_'.$folio.($isEdit?'_R'.$revision:'').'.pdf',
         'contentType'=>'application/pdf',
         'contentBytes'=>base64_encode($pdf),
     ]];
+    if($isEdit) $html.='<p><em>Los documentos de revisiones anteriores se conservan en la ODC del Portal.</em></p>';
     $emailInlineAttachments=ordenes_email_inline_attachments($uploaded);
     if(count($emailInlineAttachments)!==count($uploaded)){
         $html.='<p><em>Los documentos adjuntos se guardaron en la ODC y pueden consultarse desde el Buzon de Ordenes.</em></p>';
@@ -1040,9 +1141,8 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
     $history[count($history)-1]['correosCopia']=$cc;
     $history[count($history)-1]['gerenteAreaCorreo']=$managerEmail;
 
-    ordenes_send_message('AUTORIZACION ODC '.$folio.' | '.$proveedor,$html,$to,$cc,$emailAttachments);
-
-    ordenes_update_item($itemId,[
+    $subject=($isEdit?'MODIFICADO - ':'').'AUTORIZACION ODC '.$folio.($isEdit?' | R'.$revision:'').' | '.$proveedor;
+    $sendValues=[
         'Estado'=>'PENDIENTE_AUTORIZACION',
         'Revision'=>$revision,
         'HistorialAutorizacion'=>json_encode($history,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
@@ -1052,10 +1152,27 @@ function ordenes_send_email(array $input,array $user,array $files=[]): array
         'FechaEnvioAutorizacion'=>(new DateTimeImmutable('now',new DateTimeZone('America/Monterrey')))->format('Y-m-d\TH:i:s'),
         'FechaResolucion'=>null,
         'Ambiente'=>'PRODUCCION',
-    ]);
+    ];
+    if($isEdit) {
+        // Publicar revision y estado de notificacion antes de emitir el correo.
+        // Si Graph falla, la correccion no se pierde y se bloquea la autorizacion.
+        ordenes_update_item($itemId,array_replace($editValues,$sendValues));
+        try {
+            ordenes_send_message($subject,$html,$to,$cc,$emailAttachments);
+            $history[count($history)-1]['correoEstado']='ENVIADO';
+            ordenes_update_item($itemId,['HistorialAutorizacion'=>json_encode($history,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);
+        } catch(Throwable $e) {
+            error_log('ODC modificada '.$folio.' R'.$revision.' correo no confirmado: '.$e->getMessage());
+            throw new RuntimeException('La ODC '.$folio.' R'.$revision.' se guardo, pero no se pudo confirmar el correo. Regresa a Ordenes pendientes, abre la revision vigente y reenvia. No se puede autorizar mientras el correo este pendiente.');
+        }
+    } else {
+        ordenes_send_message($subject,$html,$to,$cc,$emailAttachments);
+        ordenes_update_item($itemId,$sendValues);
+    }
 
     return [
         'ok'=>true,
+        'modified'=>$isEdit,
         'recipient'=>implode(', ',$to),
         'managerCopy'=>$managerEmail,
         'sender'=>'sistemas@juanpablo.com.mx',
@@ -1237,7 +1354,13 @@ function ordenes_item_payload(int $itemId): array
     ];
 }
 
-function ordenes_process_authorization(int $itemId,array $user,string $action,string $comment=''): array
+function ordenes_process_authorization(int $itemId,array $user,string $action,string $comment='',int $expectedRevision=-1): array
+{
+    return ordenes_with_item_lock($itemId,static fn(): array =>
+        ordenes_process_authorization_unlocked($itemId,$user,$action,$comment,$expectedRevision));
+}
+
+function ordenes_process_authorization_unlocked(int $itemId,array $user,string $action,string $comment,int $expectedRevision): array
 {
     ordenes_ensure_approval_schema();
     if(!ordenes_user_is_approver($user)) throw new RuntimeException('Tu cuenta no puede autorizar ordenes.');
@@ -1249,9 +1372,13 @@ function ordenes_process_authorization(int $itemId,array $user,string $action,st
 
     $payload=ordenes_item_payload($itemId);
     if(strtoupper($payload['estado'])!=='PENDIENTE_AUTORIZACION') throw new RuntimeException('Esta ODC ya no esta pendiente de autorizacion.');
+    if($expectedRevision!==(int)$payload['revision']) throw new RuntimeException('La ODC fue modificada o la pagina es anterior. Revisa la version vigente antes de autorizar.');
 
     $item=ordenes_get_item($itemId);
     $history=ordenes_history_array($item);
+    if(ordenes_modification_mail_pending($history,(int)$payload['revision'])) {
+        throw new RuntimeException('La revision modificada tiene una notificacion pendiente. El solicitante debe reenviarla.');
+    }
     $reviewerName=trim((string)($user['name']??'Autorizador'));
     $reviewerEmail=strtolower(trim((string)($user['email']??'')));
     $eventAction=$action==='COMENTARIO'?'COMENTARIO':($action==='APROBAR'?'APROBADA':'RECHAZADA');
@@ -1315,7 +1442,16 @@ function ordenes_process_authorization(int $itemId,array $user,string $action,st
     return ['ok'=>true,'action'=>$eventAction,'folio'=>$folio];
 }
 
-function ordenes_load_user_draft(int $itemId,array $user): array
+function ordenes_last_sent_observations(array $history,int $revision): string
+{
+    foreach(array_reverse($history) as $event) {
+        if(is_array($event) && (int)($event['revision']??0)===$revision
+            && in_array($event['accion']??'',['ENVIADA_AUTORIZACION','MODIFICADA'],true)) return (string)($event['comentario']??'');
+    }
+    return '';
+}
+
+function ordenes_load_user_draft(int $itemId,array $user,bool $editPending=false): array
 {
     if($itemId<=0) throw new InvalidArgumentException('Borrador invalido.');
     $email=strtolower(trim((string)($user['email']??'')));
@@ -1328,7 +1464,8 @@ function ordenes_load_user_draft(int $itemId,array $user): array
     $state=$stateField!==null?strtoupper(trim((string)($item[$stateField]??''))):'';
 
     if($owner!==$email) throw new RuntimeException('No tienes permiso para abrir este borrador.');
-    if(!in_array($state,['BORRADOR','RECHAZADA'],true)) throw new RuntimeException('La orden seleccionada no esta disponible para correccion.');
+    $allowed=$editPending?['PENDIENTE_AUTORIZACION']:['BORRADOR','RECHAZADA'];
+    if(!in_array($state,$allowed,true)) throw new RuntimeException('La orden seleccionada no esta disponible para correccion.');
 
     $get=static function(string $name) use ($item): mixed {
         $field=ordenes_field($name);
@@ -1384,7 +1521,8 @@ function ordenes_load_user_draft(int $itemId,array $user): array
         'banco'=>(string)($get('Banco')??''),
         'cuenta'=>(string)($get('Cuenta')??''),
         'clabe'=>(string)($get('CLABE')??''),
-        'observaciones'=>'',
+        'observaciones'=>$editPending?ordenes_last_sent_observations(ordenes_history_array($item),(int)($get('Revision')??0)):'',
+        'correoPendiente'=>$editPending && ordenes_modification_mail_pending(ordenes_history_array($item),(int)($get('Revision')??0)),
         'estado'=>$state,
         'revision'=>(int)($get('Revision')??0),
         'ultimoComentario'=>(string)($get('UltimoComentario')??''),

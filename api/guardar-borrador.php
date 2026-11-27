@@ -104,7 +104,11 @@ try {
         $existing = ordenes_get_item($itemId);
         $emailField = ordenes_field('SolicitanteCorreo');
         $existingOwner = $emailField !== null ? strtolower(trim((string)($existing[$emailField] ?? ''))) : '';
-        if ($existingOwner !== '' && $existingOwner !== $userEmail) throw new RuntimeException('No tienes permiso para modificar este borrador.');
+        if ($existingOwner !== $userEmail) throw new RuntimeException('No tienes permiso para modificar este borrador.');
+        $stateField = ordenes_field('Estado');
+        if (!in_array(strtoupper(trim((string)($existing[$stateField]??''))), ['BORRADOR','RECHAZADA'], true)) {
+            throw new RuntimeException('La ODC ya no es un borrador.');
+        }
         if ($folio === '') $folio = 'ODC-PREVIEW-' . str_pad((string)$itemId, 6, '0', STR_PAD_LEFT);
         $values['Title'] = $folio;
         $values['Folio'] = $folio;
