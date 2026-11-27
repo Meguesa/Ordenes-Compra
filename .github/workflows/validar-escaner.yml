@@ -1,0 +1,35 @@
+name: Validar escaner ODC
+on:
+  push:
+    branches:
+      - 'qa/odc-escanear-*'
+  pull_request:
+    paths:
+      - 'assets/js/quote-scan.js'
+      - 'scripts/preparar-escaner.sh'
+      - 'tests/quote-scan.test.cjs'
+      - 'nueva.php'
+      - 'assets/js/app.js'
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+      - name: Validar captura existente y parser
+        run: |
+          php -l nueva.php
+          node --check assets/js/app.js
+          node --check assets/js/quote-scan.js
+          node tests/quote-scan.test.cjs
+      - name: Preparar dependencias locales
+        run: bash scripts/preparar-escaner.sh

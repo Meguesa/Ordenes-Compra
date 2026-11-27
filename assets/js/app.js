@@ -764,5 +764,18 @@
     $('formStatus').textContent = 'No se pudo enviar la ODC a autorización: ' + context.mailError;
   }
 
+  if (!context.editMode && window.ODCQuoteScan && $('quoteScanSection')) {
+    window.ODCQuoteScan.bind({
+      getData: currentData,
+      apply: function (suggested) {
+        // Only explicitly selected fields are supplied. Preserve unrelated capture.
+        const data = currentData();
+        Object.assign(data, suggested);
+        populateDraft(data);
+        syncPaymentMode();
+        return recalculate();
+      }
+    });
+  }
   checkSharepoint();
 })();
