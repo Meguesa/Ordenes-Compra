@@ -444,6 +444,42 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
     <input type="hidden" id="draftPayload" name="draft_payload" value="">
     <input type="hidden" id="mailNonce" name="mail_nonce" value="<?= htmlspecialchars((string)($_SESSION['ordenes_mail_nonce'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
 
+    <?php if (!$editMode): ?>
+    <section class="form-section" id="quoteScanSection" hidden>
+      <div class="section-heading-row">
+        <div class="section-title compact">
+          <span aria-hidden="true">↗</span>
+          <div><h2>Escanear cotización</h2><p>Importa un PDF o una imagen para sugerir los datos de la ODC. La lectura se realiza en tu navegador.</p></div>
+        </div>
+      </div>
+      <label class="attachment-upload">
+        <span>Cotización original (PDF, JPG, PNG, WEBP)</span>
+        <input id="quoteScanFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp">
+        <small>Máximo 10 MB y 10 páginas de PDF; hasta 3 páginas con OCR. No se envía a ningún servicio externo.</small>
+      </label>
+      <div class="form-actions" style="margin-top:12px;flex-wrap:wrap">
+        <button id="quoteScanRead" class="primary-button" type="button">Escanear cotización</button>
+        <button id="quoteScanReset" class="secondary-button" type="button">Limpiar lectura</button>
+      </div>
+      <p id="quoteScanStatus" role="status" aria-live="polite"></p>
+      <div id="quoteScanReview" hidden>
+        <div class="rejection-notice"><strong>Revisa las sugerencias contra el documento original.</strong><span>El reconocimiento puede equivocarse. No se importan datos bancarios ni se envía automáticamente una orden.</span></div>
+        <div id="quoteScanFields"></div>
+        <div id="quoteScanAmounts" style="margin:12px 0"></div>
+        <div id="quoteScanWarnings" role="status"></div>
+        <details style="margin:12px 0">
+          <summary>Ver o corregir el texto extraído</summary>
+          <label>Texto de la cotización
+            <textarea id="quoteScanText" rows="9" maxlength="100000" spellcheck="false"></textarea>
+          </label>
+          <button id="quoteScanReparse" class="secondary-button" type="button">Volver a detectar datos</button>
+        </details>
+        <label style="display:flex;align-items:center;gap:8px"><input id="quoteScanConfirm" type="checkbox"> Verifiqué las sugerencias seleccionadas contra la cotización original.</label>
+        <button id="quoteScanApply" class="primary-button" type="button" disabled>Completar ODC con datos seleccionados</button>
+      </div>
+    </section>
+    <?php endif; ?>
+
     <section class="form-section">
       <div class="section-title">
         <span>1</span>
@@ -716,6 +752,7 @@ window.ODC_CONTEXT = <?= json_encode([
     'editMode' => $editMode,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
-<script src="assets/js/app.js?v=20261127-editar-pendientes-1"></script>
+<script src="assets/js/quote-scan.js?v=20261127-2"></script>
+<script src="assets/js/app.js?v=20261127-escaner-1"></script>
 </body>
 </html>
