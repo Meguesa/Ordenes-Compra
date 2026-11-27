@@ -217,6 +217,24 @@
       return result.trim();
     }).filter(Boolean).join('\n');
   }
+  // PDF.js owns the worker and document through PDFDocumentLoadingTask.
+  // Cleanup failures must not replace the result or the original read error.
+  async function releaseReader(task, doc, worker) {
+    async function safeRelease(target, method) {
+      try {
+        if (typeof target?.[method] !== 'function') return false;
+        await target[method]();
+        return true;
+      } catch (error) {
+        console.warn('ODC: no se pudo liberar el lector ('+method+').', error);
+        return false;
+      }
+    }
+    await safeRelease(worker, 'terminate');
+    if (!(await safeRelease(task, 'destroy'))) {
+      if (!(await safeRelease(doc, 'destroy'))) await safeRelease(doc, 'cleanup');
+    }
+  }
   async function extract(file, update, cancelled) {
     if(!file || !file.size || file.size>LIMIT)throw Error('Selecciona un archivo de hasta 10 MB.');
     const ext=file.name.toLowerCase().split('.').pop();
@@ -274,7 +292,7 @@
       task=lib.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false,
         cMapUrl:base+'pdf/cmaps/',cMapPacked:true,standardFontDataUrl:base+'pdf/standard_fonts/',
         wasmUrl:base+'pdf/wasm/',iccUrl:base+'pdf/iccs/',enableXfa:false});
-      task.onPassword=()=>{task.destroy();};
+      task.onPassword=()=>{releaseReader(task,null,null);};
       doc=await task.promise;
       const parts=[];let partial=doc.numPages>MAX_PAGES;
       for(let i=1;i<=Math.min(doc.numPages,MAX_PAGES);i++){
@@ -299,8 +317,7 @@
       const text=parts.join('\n\n');if(text.length>MAX_TEXT)partial=true;
       return {text:text.slice(0,MAX_TEXT),method:ocrPages?'PDF + OCR':'Texto de PDF',partial};
     }finally{
-      if(worker)await worker.terminate().catch(()=>{});
-      if(doc)await doc.destroy().catch(()=>{});else if(task)await task.destroy().catch(()=>{});
+      await releaseReader(task,doc,worker);
     }
   }
   function bind(callbacks){
@@ -410,7 +427,7 @@
       confirm.checked=false;change();
     });
   }
-  const api={parseQuote,pdfLines,bind,parseKnownLayout};
+  const api={parseQuote,pdfLines,bind,parseKnownLayout,releaseReader};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.ODCQuoteScan=api;
 })(typeof window!=='undefined'?window:globalThis);

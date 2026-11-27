@@ -50,3 +50,29 @@ assert.equal(el.fields.moneda,'MXN');assert.equal(el.fields.ivaPct,16);
 assert.equal(el.amounts.total,46.6436);
 assert.equal(el.items[0].description,'ART1 — DESCRIPCION DE ARTICULO MARCA DEMO');
 console.log('OK formatos de cotizaciones con SKU, UM, múltiples páginas y cuatro decimales');
+
+(async()=>{
+  const {releaseReader}=require('../assets/js/quote-scan.js');
+  let taskClosed=0,docClosed=0,workerClosed=0;
+  const docWithoutDestroy={numPages:2,cleanup(){docClosed++;}};
+  const task={destroy(){taskClosed++;return Promise.resolve();}};
+  const worker={terminate(){workerClosed++;return Promise.resolve();}};
+  await releaseReader(task,docWithoutDestroy,worker);
+  assert.equal(taskClosed,1);
+  assert.equal(docClosed,0);
+  assert.equal(workerClosed,1);
+  await releaseReader(null,docWithoutDestroy,null);
+  assert.equal(docClosed,1);
+  // A failed or synchronous cleanup must not discard data already read.
+  const warn=console.warn;console.warn=()=>{};
+  try {
+    const result=await (async()=>{try{return 'texto extraido';}finally{
+      await releaseReader({destroy(){throw Error('fallo sincrono');}},docWithoutDestroy,{terminate(){return Promise.reject(Error('fallo asincrono'));}});
+    }})();
+    assert.equal(result,'texto extraido');
+    await assert.rejects(async()=>{try{throw Error('error original');}finally{
+      await releaseReader({destroy(){throw Error('fallo al cerrar');}},null,null);
+    }},/error original/);
+  } finally {console.warn=warn;}
+  console.log('OK cierre compatible PDF.js: conserva resultado y errores originales');
+})().catch(error=>{console.error(error);process.exitCode=1;});
