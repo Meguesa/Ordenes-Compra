@@ -623,3 +623,57 @@ button{cursor:pointer}
     height:40px;
   }
 }
+
+/* ODC_QUOTE_SCAN_REVIEW: scoped overrides for the capture form's generic input/label styles. */
+#quoteScanReview{margin-top:16px;color:var(--jp-text)}
+#quoteScanReview h3{font-size:15px;line-height:1.4;color:var(--jp-brown);margin:0 0 8px}
+#quoteScanReview p{font-size:12px;line-height:1.5;color:var(--jp-muted);margin:4px 0 12px}
+#quoteScanReview .quote-scan-fields-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#quoteScanReview label.quote-scan-option,
+#quoteScanReview label.quote-scan-confirm{display:flex;flex-direction:row;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--jp-border);border-radius:9px;background:#faf8f4;cursor:pointer;min-width:0;font-size:13px;font-weight:500;line-height:1.4}
+#quoteScanReview input[type="checkbox"]{appearance:auto;display:block;box-sizing:border-box;width:17px;height:17px;min-width:17px;max-width:17px;min-height:17px;max-height:17px;flex:0 0 17px;align-self:start;margin:2px 0 0;padding:0;border:0;border-radius:3px;accent-color:var(--jp-blue);cursor:pointer}
+#quoteScanReview input[type="checkbox"]:focus-visible{outline:2px solid var(--jp-blue);outline-offset:3px}
+#quoteScanReview .quote-scan-option-text{display:flex;flex-direction:column;min-width:0;gap:2px}
+#quoteScanReview .quote-scan-option-title{font-size:11px;font-weight:800;color:var(--jp-muted);line-height:1.35}
+#quoteScanReview .quote-scan-option-value{font-size:13px;font-weight:600;color:var(--jp-brown);overflow-wrap:anywhere}
+#quoteScanReview .quote-scan-items-section{margin:20px 0 12px}
+#quoteScanReview .quote-scan-items-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+#quoteScanReview .quote-scan-items-toolbar h3{margin:0}
+#quoteScanReview .quote-scan-item-actions{display:flex;flex-wrap:wrap;gap:6px}
+#quoteScanReview .quote-scan-item-actions button{min-height:34px;padding:7px 10px;font-size:11px}
+#quoteScanReview .quote-scan-item-list{border:1px solid var(--jp-border);border-radius:10px;overflow:hidden}
+#quoteScanReview .quote-scan-item-header,
+#quoteScanReview label.quote-scan-item{display:grid;grid-template-columns:17px minmax(0,1fr) 68px minmax(86px,110px) minmax(86px,110px);gap:12px;align-items:start;padding:10px 12px}
+#quoteScanReview .quote-scan-item-header{background:#f4f0e9;color:var(--jp-muted);font-size:11px;font-weight:800}
+#quoteScanReview .quote-scan-item-header>span:nth-child(n+3){text-align:right}
+#quoteScanReview label.quote-scan-item{border-top:1px solid var(--jp-border);cursor:pointer;font-weight:500;font-size:12px;line-height:1.4;background:#fff}
+#quoteScanReview label.quote-scan-item:hover,#quoteScanReview label.quote-scan-option:hover{background:#f3f7fa}
+#quoteScanReview label.quote-scan-item:has(input:checked),#quoteScanReview label.quote-scan-option:has(input:checked){background:#eef5fa}
+#quoteScanReview .quote-scan-item-description{display:flex;flex-direction:column;gap:3px;min-width:0;overflow-wrap:anywhere}
+#quoteScanReview .quote-scan-number{text-align:right;min-width:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#quoteScanReview .quote-scan-number strong{font-weight:700}
+#quoteScanReview .quote-scan-mobile-caption{display:none}
+#quoteScanReview .quote-scan-selection-summary{margin:8px 0 0;font-weight:700;color:var(--jp-blue)}
+#quoteScanReview .quote-scan-amount-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+#quoteScanReview .quote-scan-amount{display:flex;flex-direction:column;gap:4px;border:1px solid var(--jp-border);border-radius:9px;padding:10px;background:#faf8f4;min-width:0}
+#quoteScanReview .quote-scan-amount span{font-size:11px;color:var(--jp-muted)}
+#quoteScanReview .quote-scan-amount strong{font-size:14px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#quoteScanReview .quote-scan-amount-total{background:#eef5fa;border-color:#a8c5d8;color:var(--jp-blue)}
+#quoteScanWarnings:not(:empty){margin:16px 0;padding:12px 14px;border:1px solid #e2cd9b;border-radius:9px;background:#fffaf0}
+#quoteScanWarnings ul{margin:0;padding-left:19px;font-size:12px;line-height:1.5}
+#quoteScanWarnings li+li{margin-top:4px}
+#quoteScanReview label.quote-scan-confirm{margin:12px 0}
+#quoteScanApply{margin-top:2px}
+@media(max-width:720px){
+  #quoteScanReview .quote-scan-fields-grid{grid-template-columns:1fr}
+  #quoteScanReview .quote-scan-item-header{display:none}
+  #quoteScanReview label.quote-scan-item{grid-template-columns:17px repeat(3,minmax(0,1fr));gap:7px 10px}
+  #quoteScanReview label.quote-scan-item:first-child{border-top:0}
+  #quoteScanReview .quote-scan-item-description{grid-column:2/-1}
+  #quoteScanReview .quote-scan-number{grid-row:2;text-align:left;display:flex;flex-direction:column;gap:2px}
+  #quoteScanReview .quote-scan-number:nth-child(3){grid-column:2}
+  #quoteScanReview .quote-scan-number:nth-child(4){grid-column:3}
+  #quoteScanReview .quote-scan-number:nth-child(5){grid-column:4}
+  #quoteScanReview .quote-scan-mobile-caption{display:block;font-size:10px;color:var(--jp-muted)}
+  #quoteScanApply{width:100%}
+}

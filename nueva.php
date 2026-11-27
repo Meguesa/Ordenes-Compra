@@ -364,7 +364,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#ffffff">
   <title>Nueva Orden | Jardines de Juan Pablo</title>
-  <link rel="stylesheet" href="styles.css?v=20261019-nav-1">
+  <link rel="stylesheet" href="styles.css?v=20261127-escaner-ui-1">
 </head>
 <body class="odc-new-page">
 <header class="tool-header">
@@ -474,7 +474,7 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
           </label>
           <button id="quoteScanReparse" class="secondary-button" type="button">Volver a detectar datos</button>
         </details>
-        <label style="display:flex;align-items:center;gap:8px"><input id="quoteScanConfirm" type="checkbox"> Verifiqué las sugerencias seleccionadas contra la cotización original.</label>
+        <label class="quote-scan-confirm"><input id="quoteScanConfirm" class="quote-scan-checkbox" type="checkbox"><span>Verifiqué las sugerencias seleccionadas contra la cotización original.</span></label>
         <button id="quoteScanApply" class="primary-button" type="button" disabled>Completar ODC con datos seleccionados</button>
       </div>
     </section>
@@ -752,7 +752,7 @@ window.ODC_CONTEXT = <?= json_encode([
     'editMode' => $editMode,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
-<script src="assets/js/quote-scan.js?v=20261127-3"></script>
+<script src="assets/js/quote-scan.js?v=20261127-4"></script>
 <script src="assets/js/app.js?v=20261127-escaner-1"></script>
 </body>
 </html>

@@ -330,38 +330,93 @@
     const selected=[];
     const confirm=$('quoteScanConfirm'),apply=$('quoteScanApply');
     const node=(tag,text)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text);return el;};
-    function change(){apply.disabled=!confirm.checked || !selected.some(x=>x.input.checked);}
-    function checkbox(label,value,key,checked){
-      const wrapper=node('label');wrapper.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:6px 0;overflow-wrap:anywhere';
-      const input=node('input');input.type='checkbox';input.checked=checked;input.addEventListener('change',()=>{confirm.checked=false;change();});
-      const content=node('span',label+': '+value);
-      wrapper.append(input,content);fieldBox.append(wrapper);selected.push({input,key});
+    const currency = n => new Intl.NumberFormat('es-MX',{
+      minimumFractionDigits:2,maximumFractionDigits:2
+    }).format(n);
+    const amountLabels={subtotal:'Subtotal',descuento:'Descuento',iva:'IVA',retIva:'Retención IVA',retIsr:'Retención ISR',total:'Total de la cotización'};
+    let selectionSummary=null;
+    function change(){
+      apply.disabled=!current||!confirm.checked||!selected.some(x=>x.input.checked);
+      if(selectionSummary){
+        const rows=selected.filter(x=>x.key.startsWith('item:'));
+        const chosen=rows.filter(x=>x.input.checked);
+        const subtotal=current?round(chosen.reduce((sum,x)=>sum+round(current.items[Number(x.key.split(':')[1])].qty*current.items[Number(x.key.split(':')[1])].price),0)):0;
+        selectionSummary.textContent=chosen.length+' de '+rows.length+' partidas seleccionadas · Subtotal '+currency(subtotal)+' '+(current?.fields?.moneda||'(moneda por confirmar)');
+      }
+    }
+    function checkbox(label,value,key,checked,parent,item=null){
+      const wrapper=node('label');
+      wrapper.className=item?'quote-scan-item':'quote-scan-option';
+      const input=node('input');input.type='checkbox';input.checked=checked;input.className='quote-scan-checkbox';
+      input.addEventListener('change',()=>{confirm.checked=false;change();});
+      wrapper.append(input);
+      if(item){
+        const description=node('span');description.className='quote-scan-item-description';
+        const heading=node('strong',label);heading.className='quote-scan-option-title';
+        description.append(heading,node('span',item.description));
+        wrapper.append(description);
+        for(const [caption,number] of [['Cantidad',String(item.qty)],['P. unitario',currency(item.price)],['Importe',currency(item.amount)]]){
+          const cell=node('span');cell.className='quote-scan-number';
+          const small=node('span',caption);small.className='quote-scan-mobile-caption';
+          cell.append(small,node('strong',number));wrapper.append(cell);
+        }
+      }else{
+        const content=node('span');content.className='quote-scan-option-text';
+        const heading=node('strong',label);heading.className='quote-scan-option-title';
+        const detail=node('span',value);detail.className='quote-scan-option-value';
+        content.append(heading,detail);wrapper.append(content);
+      }
+      parent.append(wrapper);selected.push({input,key});
     }
     function show(){
       current=parseQuote($('quoteScanText').value);
-      fieldBox.replaceChildren();amountBox.replaceChildren();warningBox.replaceChildren();selected.length=0;
+      fieldBox.replaceChildren();amountBox.replaceChildren();warningBox.replaceChildren();selected.length=0;selectionSummary=null;
       confirm.checked=false;
-      fieldBox.append(node('h3','Datos sugeridos (selecciona los que quieras importar)'));
+      const fieldsHeading=node('h3','Datos sugeridos del proveedor y de la compra');
+      fieldBox.append(fieldsHeading,node('p','Selecciona los datos que quieras importar.'));
+      const fieldsGrid=node('div');fieldsGrid.className='quote-scan-fields-grid';
       for(const [key,value] of Object.entries(current.fields)){
         // Tax suggestions and identity information are intentionally unchecked.
-        checkbox(labels[key]||key,value,key,false);
+        checkbox(labels[key]||key,value,key,false,fieldsGrid);
       }
+      if(!fieldsGrid.children.length)fieldsGrid.append(node('p','Sin datos identificados con suficiente estructura.'));
+      fieldBox.append(fieldsGrid);
+      const itemsSection=node('div');itemsSection.className='quote-scan-items-section';
+      const toolbar=node('div');toolbar.className='quote-scan-items-toolbar';
+      toolbar.append(node('h3','Partidas detectadas ('+current.items.length+')'));
       if(current.items.length){
-        const selectAll=node('button','Seleccionar todas las partidas');selectAll.type='button';selectAll.className='secondary-button';
-        const clearAll=node('button','Quitar selección de partidas');clearAll.type='button';clearAll.className='secondary-button';
+        const actions=node('div');actions.className='quote-scan-item-actions';
+        const selectAll=node('button','Seleccionar todas');selectAll.type='button';selectAll.className='secondary-button';
+        const clearAll=node('button','Quitar selección');clearAll.type='button';clearAll.className='secondary-button';
         selectAll.addEventListener('click',()=>{selected.filter(x=>x.key.startsWith('item:')).forEach(x=>{x.input.checked=true;});confirm.checked=false;change();});
         clearAll.addEventListener('click',()=>{selected.filter(x=>x.key.startsWith('item:')).forEach(x=>{x.input.checked=false;});confirm.checked=false;change();});
-        fieldBox.append(selectAll,clearAll);
+        actions.append(selectAll,clearAll);toolbar.append(actions);
       }
-      current.items.forEach((it,i)=>checkbox('Partida '+(i+1),it.qty+' × '+it.description+' · '+it.price.toFixed(2)+' = '+it.amount.toFixed(2),'item:'+i,false));
-      if(!selected.length)fieldBox.append(node('p','Sin datos identificados con suficiente estructura.'));
-      const summary=Object.entries(current.amounts).map(([k,v])=>k+': '+v.toFixed(Math.abs(v-round(v))>1e-8?4:2)).join(' · ');
-      amountBox.append(node('strong','Importes leídos en el documento: '),node('span',summary||'No detectados'));
-      if(current.items.length)amountBox.append(node('p','Subtotal de partidas detectadas: '+current.itemSubtotal.toFixed(2)));
+      itemsSection.append(toolbar);
+      if(current.items.length){
+        const itemList=node('div');itemList.className='quote-scan-item-list';
+        const header=node('div');header.className='quote-scan-item-header';header.setAttribute('aria-hidden','true');
+        ['', 'Descripción','Cantidad','P. unitario','Importe'].forEach(s=>header.append(node('span',s)));
+        itemList.append(header);
+        current.items.forEach((it,i)=>checkbox('Partida '+(i+1),'','item:'+i,false,itemList,it));
+        itemsSection.append(itemList);
+        selectionSummary=node('p');selectionSummary.className='quote-scan-selection-summary';selectionSummary.setAttribute('aria-live','polite');itemsSection.append(selectionSummary);
+      }else itemsSection.append(node('p','No se detectaron partidas importables.'));
+      fieldBox.append(itemsSection);
+      amountBox.append(node('h3','Importes leídos en la cotización'));
+      const amountGrid=node('div');amountGrid.className='quote-scan-amount-grid';
+      for(const [key,value] of Object.entries(current.amounts)){
+        const tile=node('div');tile.className='quote-scan-amount'+(key==='total'?' quote-scan-amount-total':'');
+        const precision=Math.abs(value-round(value))>1e-8?4:2;
+        tile.append(node('span',amountLabels[key]||key),node('strong',new Intl.NumberFormat('es-MX',{minimumFractionDigits:precision,maximumFractionDigits:precision}).format(value)+' '+(current.fields.moneda||'')));
+        amountGrid.append(tile);
+      }
+      if(amountGrid.children.length)amountBox.append(amountGrid);else amountBox.append(node('p','No se detectaron importes.'));
+      if(current.items.length)amountBox.append(node('p','Subtotal de todas las partidas detectadas: '+currency(current.itemSubtotal)));
       const ul=node('ul');
       if(partial)ul.append(node('li','Lectura parcial: se alcanzó un límite de páginas o texto. No asumas que se leyó toda la cotización.'));
       for(const warning of current.warnings)ul.append(node('li',warning));
-      warningBox.append(ul);
+      if(ul.children.length)warningBox.append(node('h3','Datos por verificar'),ul);
       $('quoteScanReview').hidden=false;change();
     }
     function reset(){
