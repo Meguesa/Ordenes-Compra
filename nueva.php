@@ -60,8 +60,18 @@ $mailResult = null;
 $mailError = '';
 $mailPayload = null;
 $initialDraft = null;
+$editMode = !$prototypeMode && isset($_GET['edit']);
 
-if (!$prototypeMode && isset($_GET['draft'])) {
+if ($editMode) {
+    try {
+        $initialDraft = ordenes_load_user_draft((int)$_GET['edit'], $user, true);
+    } catch (Throwable $error) {
+        http_response_code(403);
+        exit(htmlspecialchars($error->getMessage(), ENT_QUOTES, 'UTF-8').' <a href="index.php">Regresar a Órdenes</a>');
+    }
+}
+
+if (!$editMode && !$prototypeMode && isset($_GET['draft'])) {
     try {
         $draftId = (int)($_GET['draft'] ?? 0);
         if ($draftId > 0) $initialDraft = ordenes_load_user_draft($draftId, $user);
@@ -176,6 +186,7 @@ if (!$prototypeMode && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && (stri
         $sentFolio = trim((string)($mailResult['folio'] ?? ($mailPayload['folio'] ?? '')));
         $redirect = '/ordenes-compra/?view=pendientes';
         if ($sentFolio !== '') $redirect .= '&enviado=' . rawurlencode($sentFolio);
+        if (!empty($mailResult['modified'])) $redirect .= '&modificado=1';
 
         if (!$ok) http_response_code(400);
 
@@ -194,6 +205,7 @@ if (!$prototypeMode && is_array($mailResult) && !empty($mailResult['ok']) && $ma
     $sentFolio = trim((string)($mailResult['folio'] ?? ($mailPayload['folio'] ?? '')));
     $target = '/ordenes-compra/?view=pendientes';
     if ($sentFolio !== '') $target .= '&enviado=' . rawurlencode($sentFolio);
+    if (!empty($mailResult['modified'])) $target .= '&modificado=1';
     header('Location: ' . $target, true, 303);
     exit;
 }
@@ -394,8 +406,8 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   <section class="form-banner">
     <div>
       
-      <p class="eyebrow">Nueva orden de compra</p>
-      <h1>Captura de ODC</h1>
+      <p class="eyebrow"><?= $editMode?'Modificar orden pendiente · R'.(int)$initialDraft['revision']:'Nueva orden de compra' ?></p>
+      <h1><?= $editMode?'Editar ODC':'Captura de ODC' ?></h1>
       <p>Completa la información del proveedor y de la compra. Los importes y totales se calculan automáticamente.</p>
     </div>
     <div class="banner-meta">
@@ -420,6 +432,12 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
   </div>
   <?php endif; ?>
 
+  <?php if ($editMode): ?>
+  <div class="rejection-notice">
+    <strong><?= !empty($initialDraft['correoPendiente'])?'Notificación pendiente de la revisión vigente.':'Estás editando una orden ya enviada.' ?></strong>
+    <span>Conservarás el mismo folio. Al guardar y reenviar se notificará a Finanzas con el asunto MODIFICADO. Los adjuntos previos se conservan; agrega los corregidos si corresponde. Si el correo quedó pendiente, puedes reenviar sin cambiar los datos.</span>
+  </div>
+  <?php endif; ?>
   <form id="odcForm" class="odc-form" method="post" action="/ordenes-compra/nueva.php" enctype="multipart/form-data" novalidate>
     <input type="hidden" name="form_action" value="save_draft">
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string)($_SESSION['ordenes_csrf'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
@@ -655,9 +673,9 @@ $todayDisplay = (new DateTimeImmutable('now', new DateTimeZone('America/Monterre
         <span id="formStatus">Captura una partida para calcular el total.</span>
       </div>
       <div class="form-actions">
-        <button id="btnDraft" class="secondary-button" type="button">Guardar borrador</button>
+        <button id="btnDraft" class="secondary-button" type="button" <?= $editMode?'hidden style="display:none"':'' ?>>Guardar borrador</button>
         <button id="btnPreview" class="secondary-button" type="button">Vista previa PDF</button>
-        <button id="btnTestEmail" class="primary-button" type="button"><?= is_array($initialDraft) && strtoupper((string)($initialDraft['estado']??''))==='RECHAZADA'?'Reenviar a autorización':'Enviar a autorización' ?></button>
+        <button id="btnTestEmail" class="primary-button" type="button"><?= $editMode?'Guardar cambios y reenviar':(is_array($initialDraft) && strtoupper((string)($initialDraft['estado']??''))==='RECHAZADA'?'Reenviar a autorización':'Enviar a autorización') ?></button>
       </div>
     </section>
   </form>
@@ -695,8 +713,9 @@ window.ODC_CONTEXT = <?= json_encode([
     'mailItemId' => is_array($mailPayload) ? (int)($mailPayload['itemId'] ?? 0) : 0,
     'mailFolio' => is_array($mailPayload) ? (string)($mailPayload['folio'] ?? '') : '',
     'initialDraft' => is_array($initialDraft) ? $initialDraft : null,
-], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    'editMode' => $editMode,
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
-<script src="assets/js/app.js?v=20261105-guardar-formulario-2"></script>
+<script src="assets/js/app.js?v=20261127-editar-pendientes-1"></script>
 </body>
 </html>
