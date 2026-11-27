@@ -752,7 +752,7 @@ window.ODC_CONTEXT = <?= json_encode([
     'editMode' => $editMode,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 </script>
-<script src="assets/js/quote-scan.js?v=20261127-1"></script>
+<script src="assets/js/quote-scan.js?v=20261127-2"></script>
 <script src="assets/js/app.js?v=20261127-escaner-1"></script>
 </body>
 </html>

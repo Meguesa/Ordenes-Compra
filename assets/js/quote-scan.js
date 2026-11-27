@@ -25,7 +25,76 @@
     const v = normalize(s).replace(/[^a-z0-9]/g,'');
     return /meguesa|meg060608lq6|jardinesdejuanpablo|jdjpprevisiones/.test(v);
   }
+  function parseKnownLayout(text) {
+    const lines=String(text||'').slice(0,100000).split(/\r?\n/).map(s=>s.replace(/\u00a0/g,' ').trim()).filter(Boolean);
+    const norm=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const equipHeader=s=>/\bpartida\b.*\bsku\s*\/\s*producto\b.*\bcantidad\b.*p\.?\s*unitario.*\bimporte\b/i.test(norm(s));
+    const electricHeader=s=>/numero de articulo.*descripcion.*cantidad.*precio.*\bum\b.*\btotal\b/.test(norm(s));
+    const equip=lines.some(equipHeader),electric=lines.some(electricHeader);
+    if(equip===electric)return null;
+    const fields={},items=[],amounts={},warnings=[];
+    const joined=lines.join('\n');
+    // Suggest trade names only if the document contains the corresponding email domain.
+    if(equip&&/@equiprestmx\.com\b/i.test(joined))fields.proveedor='EQUIPREST';
+    if(electric&&/@surtidorelectrico\.com\b/i.test(joined))fields.proveedor='Surtidor Eléctrico';
+    const buyer=v=>/^(?:MEG060608LQ6)$/.test(v);
+    const rfcs=new Set();
+    for(const line of lines){
+      if(/\b(?:cliente|comprador|receptor)\b/i.test(line))continue;
+      for(const m of line.matchAll(/\b([A-ZÑ&]{3,4})[ -]?(\d{6})[ -]?([A-Z0-9]{3})\b/gi)){
+        const v=(m[1]+m[2]+m[3]).toUpperCase();if(!buyer(v))rfcs.add(v);
+      }
+    }
+    if(rfcs.size===1)fields.rfc=[...rfcs][0];
+    else warnings.push('RFC del proveedor no identificado de forma única. No se usará el RFC de MEGUESA.');
+    const payment=new Set(lines.map(l=>l.match(/\b(?:condici[oó]n(?:es)? de pago|forma de pago)\s*:\s*(.{1,180})$/i)?.[1]?.trim()).filter(Boolean));
+    if(payment.size===1)fields.condicionPago=[...payment][0];
+    else warnings.push('Condición de pago pendiente de verificar.');
+    if(equip&&/moneda\s*:\s*peso mexicano\s*\(MXN\)/i.test(joined))fields.moneda='MXN';
+    if(electric&&/\d(?:\.\d+)?\s+MXP\b/i.test(joined))fields.moneda='MXN';
+    if(!fields.moneda)warnings.push('Confirma la moneda de la cotización.');
+    const n='(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d{1,4})?';
+    const amt=s=>Number(s.replace(/,/g,''));
+    const round=n=>Math.round((n+Number.EPSILON)*100)/100;
+    const money=s=>Math.abs(s-round(s))<=0.00001;
+    const summaryRE=new RegExp('(?:^|\\s)(sub\\s*total|descuento|i\\.?v\\.?a\\.?|impuesto|total)\\s*:?\\s*-?\\s*\\$?\\s*('+n+')\\s*(?:MXP|MXN|USD)?\\s*$','i');
+    const summaries={};
+    for(const l of lines){const m=l.match(summaryRE);if(!m)continue;const key=norm(m[1]).replace(/[.\s]/g,'');const k=key==='impuesto'?'iva':key;(summaries[k]??=new Set()).add(amt(m[2]));}
+    for(const [k,v] of Object.entries(summaries)){if(v.size===1)amounts[k]=[...v][0];else warnings.push('Importe ambiguo: '+k);}
+    const eqRow=new RegExp('^(\\d+)\\s+(.+?)\\s+(\\d+(?:\\.\\d{1,2})?)\\s+\\$\\s*('+n+')\\s+\\$\\s*('+n+')$');
+    const elRow=new RegExp('^(\\d+)\\s+(\\S+)(?:\\s+(.*?))?\\s+(\\d+(?:\\.\\d{1,2})?)\\s+('+n+')\\s+MXP\\s+(\\d+(?:\\.\\d+)?)\\s+('+n+')\\s+MXP$','i');
+    const header=equip?equipHeader:electricHeader;
+    const row=equip?eqRow:elRow;
+    const boundary=l=>!l||header(l)||row.test(l)||summaryRE.test(l)||/^(?:obs\s*:|\*|[-–]|pagina\b|página\b|hoja\b|web-whatsapp|fomo-|importe con letra|datos del cliente|vendedor:|favor de verificar|cotizacion\b|cotización\b)/i.test(l)||/^\d+\s*$/.test(l);
+    let inTable=false;const seen=new Set();
+    for(let i=0;i<lines.length;i++){
+      const l=lines[i];if(header(l)){inTable=true;continue;}
+      if(summaryRE.test(l)||/^(?:web-whatsapp|p[aá]gina\s+\d|fomo-|\*precios|importe con letra)/i.test(l)){inTable=false;continue;}
+      if(!inTable)continue;
+      const m=l.match(row);if(!m)continue;
+      let id,sku,qty,price,total,description;
+      if(equip){id=m[1];sku=m[2];qty=Number(m[3]);price=amt(m[4]);total=amt(m[5]);description=[sku,!boundary(lines[i+1])?lines[i+1]:''].filter(Boolean).join(' — ');}
+      else{id=m[1];sku=m[2];qty=Number(m[4]);price=amt(m[5]);total=amt(m[7]);if(Number(m[6])!==qty){warnings.push('Partida '+id+': cantidad y UM no coinciden.');continue;}description=[sku,[!boundary(lines[i-1])?lines[i-1]:'',m[3]||'',!boundary(lines[i+1])?lines[i+1]:''].filter(Boolean).join(' ')].filter(Boolean).join(' — ');}
+      if(seen.has(id)){warnings.push('Número de partida repetido: '+id+'. Verifica todas las páginas.');continue;}
+      if(qty<=0||qty>1000000||price<0||price>1e9||!money(price)||Math.abs(round(qty*price)-total)>.011){warnings.push('Partida '+id+' no importada: importe o precisión no compatibles.');continue;}
+      seen.add(id);items.push({qty,description,price,amount:round(total)});
+      if(items.length>=100){warnings.push('Límite de 100 partidas sugeridas; verifica si faltan conceptos.');break;}
+    }
+    const itemSubtotal=round(items.reduce((s,i)=>s+round(i.qty*i.price),0));
+    if(amounts.subtotal>0&&amounts.iva!==undefined){const pct=round(amounts.iva*100/amounts.subtotal);if(pct<=100&&Math.abs(round(amounts.subtotal*pct/100)-round(amounts.iva))<=.010001){fields.ivaPct=pct;if(round(amounts.subtotal*pct/100)!==round(amounts.iva))warnings.push('Diferencia de redondeo de IVA: la ODC calcula '+round(amounts.subtotal*pct/100).toFixed(2)+' y el PDF indica '+round(amounts.iva).toFixed(2)+'. Revisa con Finanzas.');}}
+    if(amounts.descuento!==undefined&&amounts.descuento<=amounts.subtotal)fields.descuentoValor=round(amounts.descuento);
+    if(!items.length||amounts.subtotal===undefined||Math.abs(itemSubtotal-round(amounts.subtotal))>.01)warnings.push('Las partidas detectadas no concilian con el subtotal. Revisa si faltan partidas.');
+    if(amounts.total===undefined)warnings.push('No se detectó un total único.');
+    else if(amounts.subtotal!==undefined&&amounts.iva!==undefined&&Math.abs(round(amounts.subtotal+amounts.iva-(amounts.descuento||0))-round(amounts.total))>.01)warnings.push('Los importes del documento no concilian.');
+    if(!fields.proveedor)warnings.push('Confirma la razón social del proveedor.');
+    if(fields.proveedor)warnings.push('El nombre sugerido es comercial; verifica la razón social fiscal.');
+    warnings.push('Selecciona únicamente las partidas que se comprarán; revisa los detalles técnicos y los datos fiscales. No se importan cuentas ni CLABE.');
+    if(equip)warnings.push('El plazo de entrega varía según tipo de equipo y existencias; captura el plazo acordado. Las observaciones técnicas detalladas permanecen en la cotización adjunta.');
+    return {fields,items,amounts,itemSubtotal,warnings};
+  }
   function parseQuote(text) {
+    const known=parseKnownLayout(text);
+    if(known)return known;
     const lines = String(text || '').slice(0,MAX_TEXT).split(/\r?\n/).map(x=>x.replace(/\u00a0/g,' ').trim()).filter(Boolean);
     const fields = {}, amounts = {}, items = [], warnings = [];
     const picks = (pattern, filter) => {
@@ -247,7 +316,7 @@
     function change(){apply.disabled=!confirm.checked || !selected.some(x=>x.input.checked);}
     function checkbox(label,value,key,checked){
       const wrapper=node('label');wrapper.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:6px 0;overflow-wrap:anywhere';
-      const input=node('input');input.type='checkbox';input.checked=checked;input.addEventListener('change',change);
+      const input=node('input');input.type='checkbox';input.checked=checked;input.addEventListener('change',()=>{confirm.checked=false;change();});
       const content=node('span',label+': '+value);
       wrapper.append(input,content);fieldBox.append(wrapper);selected.push({input,key});
     }
@@ -260,9 +329,16 @@
         // Tax suggestions and identity information are intentionally unchecked.
         checkbox(labels[key]||key,value,key,false);
       }
+      if(current.items.length){
+        const selectAll=node('button','Seleccionar todas las partidas');selectAll.type='button';selectAll.className='secondary-button';
+        const clearAll=node('button','Quitar selección de partidas');clearAll.type='button';clearAll.className='secondary-button';
+        selectAll.addEventListener('click',()=>{selected.filter(x=>x.key.startsWith('item:')).forEach(x=>{x.input.checked=true;});confirm.checked=false;change();});
+        clearAll.addEventListener('click',()=>{selected.filter(x=>x.key.startsWith('item:')).forEach(x=>{x.input.checked=false;});confirm.checked=false;change();});
+        fieldBox.append(selectAll,clearAll);
+      }
       current.items.forEach((it,i)=>checkbox('Partida '+(i+1),it.qty+' × '+it.description+' · '+it.price.toFixed(2)+' = '+it.amount.toFixed(2),'item:'+i,false));
       if(!selected.length)fieldBox.append(node('p','Sin datos identificados con suficiente estructura.'));
-      const summary=Object.entries(current.amounts).map(([k,v])=>k+': '+v.toFixed(2)).join(' · ');
+      const summary=Object.entries(current.amounts).map(([k,v])=>k+': '+v.toFixed(Math.abs(v-round(v))>1e-8?4:2)).join(' · ');
       amountBox.append(node('strong','Importes leídos en el documento: '),node('span',summary||'No detectados'));
       if(current.items.length)amountBox.append(node('p','Subtotal de partidas detectadas: '+current.itemSubtotal.toFixed(2)));
       const ul=node('ul');
@@ -329,12 +405,12 @@
       }
       const totals=callbacks.apply(data);
       const expected=current.amounts.total;
-      const difference=expected===undefined?null:round(totals.total-expected);
-      status('Datos seleccionados importados; la cotización original está en Adjuntos. '+(difference===null?'No se detectó un total para comparar.':close(totals.total,expected)?'El total calculado coincide con el total leído.':'ATENCIÓN: diferencia de '+difference.toFixed(2)+' respecto al total leído. Corrige los datos antes de enviar.')+' Revisa toda la orden antes de guardar o enviar.');
+      const difference=expected===undefined?null:round(round(totals.total)-round(expected));
+      status('Datos seleccionados importados; la cotización original está en Adjuntos. '+(difference===null?'No se detectó un total para comparar.':difference===0?'El total calculado coincide con el total leído.':'ATENCIÓN: diferencia de '+difference.toFixed(2)+' respecto al total leído. Corrige los datos antes de enviar.')+' Revisa toda la orden antes de guardar o enviar.');
       confirm.checked=false;change();
     });
   }
-  const api={parseQuote,pdfLines,bind};
+  const api={parseQuote,pdfLines,bind,parseKnownLayout};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.ODCQuoteScan=api;
 })(typeof window!=='undefined'?window:globalThis);
